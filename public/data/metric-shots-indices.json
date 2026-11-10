@@ -1,0 +1,67 @@
+{
+  "type": "fm-stats-analyst/metrics",
+  "version": 1,
+  "metrics": [
+    {
+      "id": "1e8b2451-0831-4408-882a-dce8eacf37cc",
+      "name": "Shots Index",
+      "description": "0-100 index of number of shots taken by a player compared across the dataset",
+      "groupId": "3d2e59aa-89c2-4778-9c4f-fb75b9ef9a7a",
+      "expression": {
+        "type": "op",
+        "op": "/",
+        "left": {
+          "type": "column",
+          "column": "Shots"
+        },
+        "right": {
+          "type": "stat",
+          "fn": "max",
+          "column": "Shots"
+        }
+      },
+      "onlyIfPlayed": true,
+      "normalize": true,
+      "decimals": 0,
+      "colorScale": true
+    },
+    {
+      "id": "4d8d28a3-d006-4f3f-815b-5edec0efbc3b",
+      "name": "Shots on Target Index",
+      "description": "0-100 index of shots on target compared across the dataset",
+      "groupId": "3d2e59aa-89c2-4778-9c4f-fb75b9ef9a7a",
+      "expression": {
+        "type": "op",
+        "op": "*",
+        "left": {
+          "type": "op",
+          "op": "/",
+          "left": {
+            "type": "column",
+            "column": "Shot %"
+          },
+          "right": {
+            "type": "stat",
+            "fn": "max",
+            "column": "Shot %"
+          }
+        },
+        "right": {
+          "type": "column",
+          "column": "Shots Index"
+        }
+      },
+      "onlyIfPlayed": true,
+      "normalize": true,
+      "decimals": 0,
+      "colorScale": true
+    }
+  ],
+  "groups": [
+    {
+      "id": "3d2e59aa-89c2-4778-9c4f-fb75b9ef9a7a",
+      "name": "Shooting",
+      "parentId": null
+    }
+  ]
+}

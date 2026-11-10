@@ -1,0 +1,63 @@
+@use 'sass:color';
+@use 'variables' as *;
+
+%btn {
+  top: 0;
+  left: 0;
+  margin: 0;
+  padding: 0.5rem;
+  color: $text-color;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  background-color: color.adjust($background-color, $lightness: 5%);
+  border: 1px solid color.adjust($background-color, $lightness: 15%);
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+  position: relative;
+
+  &:active:not(:disabled) {
+    top: 2px;
+    left: 2px;
+    box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.5);
+    background-color: color.adjust($background-color, $lightness: 10%);
+  }
+  &:hover:not(:disabled) {
+    background-color: color.adjust($background-color, $lightness: 10%);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &.danger {
+    border-color: #a33;
+    background-color: #461515;
+
+    &:hover {
+      background-color: #571a1a;
+    }
+  }
+
+  &.primary:not(:disabled) {
+    border-color: color.adjust($background-color, $lightness: 35%);
+    background-color: color.adjust($background-color, $lightness: 15%);
+  }
+}
+
+%input {
+  padding: 0rem 0.5rem;
+  color: $text-color;
+  font: inherit;
+  line-height: 2rem;
+  background-color: color.adjust($background-color, $lightness: 5%);
+  border: 1px solid color.adjust($background-color, $lightness: 15%);
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+
+  &:active,
+  &:hover:not(:disabled) {
+    background-color: color.adjust($background-color, $lightness: 10%);
+  }
+}

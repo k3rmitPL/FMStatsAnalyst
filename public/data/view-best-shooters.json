@@ -1,0 +1,31 @@
+{
+  "type": "fm-stats-analyst/views",
+  "version": 1,
+  "views": [
+    {
+      "id": "b3f3b092-9047-495c-ac14-207508f43fd5",
+      "name": "Best Shooters",
+      "description": "",
+      "positions": [],
+      "filters": [],
+      "columns": [
+        "Player",
+        "Club",
+        "Age",
+        "Position",
+        "Shot %",
+        "Shots on Target Index",
+        "Shots",
+        "Shots Index"
+      ],
+      "frozenLeft": [
+        "Player"
+      ],
+      "frozenRight": [],
+      "sort": {
+        "column": "Shots on Target Index",
+        "direction": "desc"
+      }
+    }
+  ]
+}

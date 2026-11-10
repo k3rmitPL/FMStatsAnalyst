@@ -1,0 +1,16 @@
+@use 'sass:color';
+
+$text-color: #eee;
+$link-color: #fff;
+$accent-color: #4fd39a;
+
+$background-color: #1c2131;
+$card-background: color.adjust($background-color, $lightness: 3%);
+$card-border: color.adjust($background-color, $lightness: 12%);
+
+$default-font-size: 1rem;
+$default-line-height: 1.5rem;
+
+$regular-fonts:
+  'Roboto Condensed', 'Open Sans Condensed', 'Open Sans', 'Helvetica Neue', HelveticaNeue,
+  Helvetica, Arial, Tahoma, sans-serif;
