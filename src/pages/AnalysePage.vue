@@ -5,13 +5,22 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import ActionMenu from '@/components/ActionMenu.vue'
 import ColumnPicker from '@/components/ColumnPicker.vue'
 import CSVFileInput from '@/components/CSVFileInput.vue'
+import NotesDialog from '@/components/NotesDialog.vue'
 import SaveViewDialog from '@/components/SaveViewDialog.vue'
 import TeamSelect from '@/components/TeamSelect.vue'
 import ViewFiltersDialog from '@/components/ViewFiltersDialog.vue'
-import { deleteImport, getImports, getRows, getStats } from '@/services/db'
+import {
+  deleteImport,
+  getImports,
+  getRows,
+  getStats,
+  ROW_ID,
+  updateImport,
+  updateRowValue,
+} from '@/services/db'
 import { downloadJson, jsonFileName, pickFile } from '@/services/fileTransfer'
 import { computeMetrics } from '@/services/metrics'
-import { NA } from '@/services/transform'
+import { NA, NOTES_COLUMN } from '@/services/transform'
 import { newView, viewRowFilter, viewsFile } from '@/services/views'
 import { useLibraryStore } from '@/stores/library'
 import { columnLabel } from '@/utils/columns'
@@ -21,14 +30,21 @@ const PAGE_SIZES = [15, 30, 50, 100]
 
 // Columns frozen to the table edges by default (raw CSV / derived column names).
 const DEFAULT_FROZEN_LEFT = ['Player', 'Club', 'Age', 'Division', 'Nation', 'Position']
-const DEFAULT_FROZEN_RIGHT = ['Transfer Value Max', 'Wage Max', 'Expires']
+const DEFAULT_FROZEN_RIGHT = ['Transfer Value Max', 'Wage Max', 'Expires', NOTES_COLUMN]
+
+// Width of the Notes column in px; longer notes are cut off (the full text is in a tooltip).
+const NOTES_COLUMN_WIDTH = 100
 
 // Column holding each player's team.
 const TEAM_COLUMN = 'Club'
+// Column holding each player's name.
+const PLAYER_COLUMN = 'Player'
 
 const HEADER_ANGLE = (70 * Math.PI) / 180
 
 const COLUMN_DRAG_TYPE = 'application/x-fm-column'
+
+const STAR_PATH = 'M8 1.2l2 4.3 4.7.5-3.5 3.2 1 4.6L8 11.4l-4.2 2.4 1-4.6L1.3 6l4.7-.5z'
 
 // Where the app is served from, for links to files in public/ (e.g. '/' or '/fm/').
 const BASE_URL = import.meta.env.BASE_URL
@@ -87,11 +103,42 @@ const activeViewId = ref(
     ? route.query.view
     : readPreference('analyseView', '', (v) => typeof v === 'string'),
 )
+// Row whose notes are being edited in the Notes dialog.
+const notesRow = ref(null)
+const notesOpen = ref(false)
 // Team whose players are highlighted in the table ('' = none). Remembered in this browser.
 const selectedTeam = usePreference('team', '', (v) => typeof v === 'string')
+// Only list shortlisted players. Remembered in this browser.
+const shortlistOnly = usePreference('shortlistOnly', false, (v) => typeof v === 'boolean')
+// Header of the shortlist column, always the first one; frozen columns start after it.
+const shortlistHeader = ref(null)
 
 const selectedImport = computed(() => imports.value.find((i) => i.id === selectedId.value))
 const datasetColumns = computed(() => selectedImport.value?.columns ?? [])
+
+// Shortlisted players of the selected dataset, by row id. Each dataset keeps its own shortlist
+// on its import record, apart from the row data (a dataset imported twice has two shortlists).
+const shortlistIds = computed(() => new Set(selectedImport.value?.shortlist ?? []))
+
+function isShortlisted(row) {
+  return shortlistIds.value.has(row[ROW_ID])
+}
+
+async function toggleShortlist(row) {
+  const current = selectedImport.value
+  const id = row[ROW_ID]
+  if (!current || id == null) return
+  const next = new Set(shortlistIds.value)
+  if (!next.delete(id)) next.add(id)
+  const ids = [...next]
+  current.shortlist = ids
+  try {
+    // The plain array: IndexedDB can't store the reactive copy in `current`.
+    await updateImport(current.id, { shortlist: ids })
+  } catch (error) {
+    message.value = `Saving the shortlist failed: ${error.message}`
+  }
+}
 
 // Custom metrics are computed in memory and shown as extra columns, before the dataset's own.
 const metricResult = computed(() =>
@@ -228,10 +275,14 @@ const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', tim
 const viewRows = computed(() =>
   rowFilter.value ? tableRows.value.filter(rowFilter.value) : tableRows.value,
 )
+// Then only shortlisted players, when chosen (kept out of viewRows, which the Filters dialog counts).
+const listedRows = computed(() =>
+  shortlistOnly.value ? viewRows.value.filter(isShortlisted) : viewRows.value,
+)
 const filteredRows = computed(() => {
   const term = search.value.trim().toLowerCase()
-  if (!term) return viewRows.value
-  return viewRows.value.filter((row) =>
+  if (!term) return listedRows.value
+  return listedRows.value.filter((row) =>
     columns.value.some((col) => {
       const value = formatCell(row[col])
       return value !== '' && value.toLowerCase().includes(term)
@@ -298,9 +349,39 @@ function headerTitle(col) {
   return lines.join('\n')
 }
 
+function isNotesColumn(col) {
+  return columnInfo.value[col]?.type === 'notes'
+}
+
+/** Fixed width for the Notes column, on its header and cells. */
+function widthStyle(col) {
+  if (!isNotesColumn(col)) return undefined
+  const width = `${NOTES_COLUMN_WIDTH}px`
+  return { width, minWidth: width, maxWidth: width }
+}
+
+function editNotes(row) {
+  notesRow.value = row
+  notesOpen.value = true
+}
+
+/** Saves the edited notes to the row in memory and in the database. */
+async function saveNotes(text) {
+  const id = notesRow.value?.[ROW_ID]
+  // Shown rows can be copies (with metric values added); the loaded row is the one to change.
+  const source = rows.value.find((r) => r[ROW_ID] === id)
+  if (id == null || !source) return
+  try {
+    await updateRowValue(id, NOTES_COLUMN, text)
+    source[NOTES_COLUMN] = text
+  } catch (error) {
+    message.value = `Saving the notes failed: ${error.message}`
+  }
+}
+
 /** Background for metrics with a colour scale: red (lowest) to green (highest). */
 function cellStyle(col, value) {
-  const style = stickyStyle(col)
+  const style = { ...stickyStyle(col), ...widthStyle(col) }
   if (!columnInfo.value[col]?.colorScale || typeof value !== 'number') return style
   const range = allStats.value[col]
   const span = range ? range.max - range.min : 0
@@ -516,7 +597,7 @@ function stickyStyle(col) {
 }
 
 function headerStyle(col, index) {
-  const style = { ...stickyStyle(col) }
+  const style = { ...stickyStyle(col), ...widthStyle(col) }
   if (rotateHeaders.value) {
     // Rotated labels overflow into the next columns' headers, so earlier headers are stacked
     // above later ones; frozen headers stay above the scrolling ones.
@@ -554,7 +635,7 @@ function updateLayout() {
   if (rotateHeaders.value) measureRotatedHeaders()
 
   const offsets = {}
-  let left = 0
+  let left = shortlistHeader.value?.getBoundingClientRect().width ?? 0
   for (const col of visibleLeft.value) {
     offsets[col] = left
     left += headerCells.get(col)?.getBoundingClientRect().width ?? 0
@@ -662,7 +743,7 @@ watch(selectedId, async (id) => {
   }
 })
 
-watch(search, () => {
+watch([search, shortlistOnly], () => {
   page.value = 1
 })
 
@@ -806,6 +887,11 @@ onBeforeUnmount(() => {
 
       <TeamSelect v-model="selectedTeam" :teams="teams" />
 
+      <label class="checkbox">
+        <input v-model="shortlistOnly" type="checkbox" />
+        Show shortlisted only
+      </label>
+
       <ColumnPicker
         v-model="hiddenColumns"
         :columns="columns"
@@ -826,7 +912,9 @@ onBeforeUnmount(() => {
       <div class="table-options">
         <p class="summary">
           Showing {{ pageRows.length }} of {{ sortedRows.length }} rows
-          <span v-if="search || filterCount">(filtered from {{ rows.length }})</span>
+          <span v-if="search || filterCount || shortlistOnly"
+            >(filtered from {{ rows.length }})</span
+          >
         </p>
       </div>
 
@@ -842,6 +930,17 @@ onBeforeUnmount(() => {
           <thead>
             <tr>
               <th
+                ref="shortlistHeader"
+                class="shortlist-col frozen-left"
+                :class="{ 'frozen-edge-left': !visibleLeft.length }"
+                :style="rotateHeaders ? { zIndex: displayColumns.length * 2 + 12 } : undefined"
+                title="Shortlist"
+              >
+                <svg class="star" viewBox="0 0 16 16" aria-label="Shortlist">
+                  <path :d="STAR_PATH" />
+                </svg>
+              </th>
+              <th
                 v-for="(col, index) in displayColumns"
                 :key="col"
                 :ref="(el) => setHeaderCell(col, el)"
@@ -850,6 +949,7 @@ onBeforeUnmount(() => {
                   dragged: draggedColumn === col,
                   'drop-before': dropMark?.col === col && !dropMark.after,
                   'drop-after': dropMark?.col === col && dropMark.after,
+                  notes: isNotesColumn(col),
                   ...frozenClass(col),
                 }"
                 :style="headerStyle(col, index)"
@@ -903,16 +1003,49 @@ onBeforeUnmount(() => {
           <tbody>
             <tr v-for="(row, i) in pageRows" :key="i" :class="{ 'team-row': isTeamRow(row) }">
               <td
+                class="shortlist-col frozen-left"
+                :class="{ 'frozen-edge-left': !visibleLeft.length }"
+              >
+                <button
+                  type="button"
+                  class="star-toggle"
+                  :class="{ active: isShortlisted(row) }"
+                  :aria-pressed="isShortlisted(row)"
+                  :title="isShortlisted(row) ? 'Remove from shortlist' : 'Add to shortlist'"
+                  @click="toggleShortlist(row)"
+                >
+                  <svg class="star" viewBox="0 0 16 16" aria-hidden="true">
+                    <path :d="STAR_PATH" />
+                  </svg>
+                </button>
+              </td>
+              <td
                 v-for="col in displayColumns"
                 :key="col"
                 :class="{
                   numeric: columnInfo[col]?.type === 'number',
                   boolean: columnInfo[col]?.type === 'boolean',
+                  notes: isNotesColumn(col),
                   ...frozenClass(col),
                 }"
                 :style="cellStyle(col, row[col])"
               >
-                {{ formatCell(row[col]) }}
+                <div v-if="isNotesColumn(col)" class="notes-cell">
+                  <span class="notes-text" :title="row[col] || undefined">{{ row[col] }}</span>
+                  <button
+                    type="button"
+                    class="notes-edit"
+                    title="Edit notes"
+                    @click="editNotes(row)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M8.5 14.5h-6v-13h8v3" />
+                      <path d="M4.5 5h4M4.5 7.5h3M4.5 10h2" />
+                      <path d="M13 6.5l1.5 1.5-5 5-2 .5.5-2z" />
+                    </svg>
+                  </button>
+                </div>
+                <template v-else>{{ formatCell(row[col]) }}</template>
               </td>
               <td
                 v-if="rotateHeaders"
@@ -949,6 +1082,12 @@ onBeforeUnmount(() => {
       :column-info="columnInfo"
       :match-count="viewRows.length"
       :total-count="rows.length"
+    />
+    <NotesDialog
+      v-model:open="notesOpen"
+      :title="notesRow?.[PLAYER_COLUMN] ? `Notes: ${notesRow[PLAYER_COLUMN]}` : 'Notes'"
+      :value="String(notesRow?.[NOTES_COLUMN] ?? '')"
+      @save="saveNotes"
     />
     <SaveViewDialog
       v-model:open="saveAsOpen"
@@ -1050,6 +1189,7 @@ button.filters-button {
 }
 
 table {
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
   white-space: nowrap;
@@ -1206,12 +1346,114 @@ td.filler {
   cursor: default;
 }
 
+// Shortlist column: a star per player, always first, not sortable or movable.
+th.shortlist-col,
+td.shortlist-col {
+  left: 0;
+  width: 1px;
+  padding: 0 0.35rem;
+  text-align: center;
+  cursor: default;
+}
+
+th.shortlist-col .star {
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+  fill: currentColor;
+  opacity: 0.6;
+}
+
+.star-toggle {
+  display: block;
+  padding: 2px;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+
+  .star {
+    width: 16px;
+    height: 16px;
+    fill: #fff;
+    opacity: 0.15;
+  }
+
+  &.active .star {
+    fill: #ffc83d;
+    opacity: 1;
+  }
+
+  &:hover {
+    // background: color.adjust($background-color, $lightness: 18%);
+  }
+
+  &:hover:not(.active) .star {
+    opacity: 0.5;
+  }
+}
+
 td.numeric {
   text-align: center;
 }
 
 td.boolean {
   text-align: center;
+}
+
+// Fixed width (set inline): the start of the notes, then the edit button.
+th.notes,
+td.notes {
+  box-sizing: border-box;
+}
+
+// Tighter header, so the label, sort arrow and both pins fit in the fixed width.
+table:not(.rotated-headers) th.notes {
+  padding-right: 0.25rem;
+
+  .th-inner {
+    gap: 0.25rem;
+  }
+}
+
+.notes-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.notes-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notes-edit {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 2px;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  opacity: 0.55;
+  cursor: pointer;
+
+  svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &:hover {
+    background: color.adjust($background-color, $lightness: 18%);
+    opacity: 1;
+  }
 }
 
 tbody tr:hover td {

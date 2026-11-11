@@ -6,10 +6,13 @@
 // Produces:
 //   rows        transformed row objects
 //   columns     column order, with derived columns placed after their source column
-//   columnInfo  { [column]: { type: 'number' | 'date' | 'boolean' | 'text', unit?: string } }
+//   columnInfo  { [column]: { type: 'number' | 'date' | 'boolean' | 'text' | 'notes', unit?: string } }
 //   stats       { [column]: { min, max } } for numerical columns
 
 export const NA = 'N/A'
+
+// Empty column added to every import for the user's own notes about a player.
+export const NOTES_COLUMN = 'Notes'
 
 // Values FM uses for "no value".
 const PLACEHOLDERS = new Set(['', '-', 'N/A', 'n/a', 'Unknown', 'Not for Sale'])
@@ -443,6 +446,13 @@ export function transformDataset(rows, fields) {
   })
 
   addPer90Columns(transformed, columns, columnInfo)
+
+  // Unless the CSV has a column of that name already.
+  if (!(NOTES_COLUMN in columnInfo)) {
+    columns.push(NOTES_COLUMN)
+    columnInfo[NOTES_COLUMN] = { type: 'notes' }
+    for (const row of transformed) row[NOTES_COLUMN] = ''
+  }
 
   const stats = {}
   for (const col of columns) {

@@ -1,13 +1,18 @@
 // Thin promise wrapper around IndexedDB for storing imported CSV data.
 //
 // Schema:
-//   imports: { id (auto), fileName, importedAt, rowCount, columns, columnInfo }
+//   imports: { id (auto), fileName, importedAt, rowCount, columns, columnInfo, shortlist? }
+//            (shortlist: ids of the shortlisted rows of that import)
 //   rows:    { id (auto), importId, data }  (index: importId)
 //   stats:   { importId, columns: { [column]: { min, max } } }  (min/max of numerical columns)
 //   config:  { key, items }  (user definitions: key 'metrics' or 'views')
 
 const DB_NAME = 'fm_stats_analyst'
 const DB_VERSION = 3
+
+// Key of the stored record's id on row objects returned by getRows(), for updateRowValue().
+// A symbol, so it isn't mistaken for a column.
+export const ROW_ID = Symbol('rowId')
 
 let dbPromise = null
 
@@ -134,7 +139,17 @@ export async function getRows(importId) {
   const db = await openDB()
   const tx = db.transaction('rows', 'readonly')
   const records = await requestToPromise(tx.objectStore('rows').index('importId').getAll(importId))
-  return records.map((r) => r.data)
+  return records.map((r) => Object.assign(r.data, { [ROW_ID]: r.id }))
+}
+
+/** Sets one value of a stored row (`rowId` is the row's ROW_ID). */
+export async function updateRowValue(rowId, column, value) {
+  const db = await openDB()
+  const tx = db.transaction('rows', 'readwrite')
+  const store = tx.objectStore('rows')
+  const record = await requestToPromise(store.get(rowId))
+  if (record) store.put({ ...record, data: { ...record.data, [column]: value } })
+  await transactionDone(tx)
 }
 
 /** Deletes an import and all of its rows. */

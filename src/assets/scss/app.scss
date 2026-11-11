@@ -137,9 +137,13 @@ select {
 }
 textarea {
   height: 5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  line-height: 1.5rem;
 }
 
-button:not(.pin) {
+// Small icon buttons in the table are plain: no raised button look.
+button:not(.pin, .notes-edit, .star-toggle) {
   @extend %btn;
 }
 button.short {

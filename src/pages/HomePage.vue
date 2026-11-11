@@ -276,7 +276,6 @@ h2 {
 .steps ol {
   display: grid;
   gap: 0.75rem;
-  max-width: 46rem;
   margin: 0;
   padding: 0;
   list-style: none;
