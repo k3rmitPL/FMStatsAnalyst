@@ -8,6 +8,10 @@ $background-color: #1c2131;
 $card-background: color.adjust($background-color, $lightness: 3%);
 $card-border: color.adjust($background-color, $lightness: 12%);
 
+// Below this width the Metrics page stacks its columns (list, editor, palette), so the side
+// columns stop being sticky.
+$sidebar-breakpoint: 1100px;
+
 $default-font-size: 1rem;
 $default-line-height: 1.5rem;
 

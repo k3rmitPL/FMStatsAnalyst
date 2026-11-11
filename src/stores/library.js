@@ -1,7 +1,7 @@
 // User-defined metrics and views, kept in IndexedDB and shared by all pages.
 // `metrics` and `views` hold the saved versions (persisted whenever they change). The metrics
 // editor works on drafts and writes them back with an explicit save; metrics can be organised in
-// groups. Views are edited on the Analyze page, which writes them here directly.
+// groups. Views are edited on the Analyse page, which writes them here directly.
 
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'

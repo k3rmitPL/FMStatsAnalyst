@@ -127,7 +127,7 @@ export function createGroups(groups, saved, drafts) {
 
   /** Deletes every item and group. */
   function clear() {
-    for (const item of [...drafts.items]) drafts.remove(item.id)
+    for (const item of drafts.items) drafts.remove(item.id)
     groups.value = []
   }
 

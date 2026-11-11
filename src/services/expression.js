@@ -15,11 +15,11 @@
 // division by zero gives null, and comparisons involving null are false.
 
 export const OPERATORS = {
-  '+': { label: '+', apply: (a, b) => a + b },
-  '-': { label: '−', apply: (a, b) => a - b },
-  '*': { label: '×', apply: (a, b) => a * b },
-  '/': { label: '÷', apply: (a, b) => (b === 0 ? null : a / b) },
-  '^': { label: '^', apply: (a, b) => a ** b },
+  '+': { label: '+', name: 'Add', apply: (a, b) => a + b },
+  '-': { label: '−', name: 'Subtract', apply: (a, b) => a - b },
+  '*': { label: '×', name: 'Multiply', apply: (a, b) => a * b },
+  '/': { label: '÷', name: 'Divide', apply: (a, b) => (b === 0 ? null : a / b) },
+  '^': { label: '^', name: 'Power', apply: (a, b) => a ** b },
 }
 
 export const COMPARISONS = {
@@ -267,6 +267,7 @@ export const BLOCKS = [
       {
         id: 'if',
         label: 'If ... then ... else',
+        // oxlint-disable-next-line unicorn/no-thenable
         create: () => ({ type: 'if', left: null, cmp: '==', right: null, then: null, else: null }),
       },
       {
@@ -287,6 +288,22 @@ export const BLOCKS = [
 export const BLOCKS_BY_ID = Object.fromEntries(
   BLOCKS.flatMap((g) => g.items.map((item) => [item.id, item])),
 )
+
+const GROUP_BY_BLOCK_ID = Object.fromEntries(
+  BLOCKS.flatMap((g) => g.items.map((item) => [item.id, g.group])),
+)
+
+/** Palette group and name of a node, e.g. { group: 'Functions', name: 'Average' }. */
+export function blockInfo(node) {
+  switch (node?.type) {
+    case 'op':
+      return { group: GROUP_BY_BLOCK_ID[`op${node.op}`], name: OPERATORS[node.op]?.name ?? node.op }
+    case 'call':
+      return { group: GROUP_BY_BLOCK_ID[`fn-${node.fn}`], name: FUNCTIONS[node.fn]?.label ?? node.fn }
+    default:
+      return { group: GROUP_BY_BLOCK_ID[node?.type], name: BLOCKS_BY_ID[node?.type]?.label ?? node?.type }
+  }
+}
 
 /** Category of a node, used for colouring blocks. */
 export function nodeCategory(node) {

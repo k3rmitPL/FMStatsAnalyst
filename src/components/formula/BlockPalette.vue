@@ -87,6 +87,10 @@ $colors: (
   background: color.adjust($background-color, $lightness: 3%);
   border: 1px solid color.adjust($background-color, $lightness: 12%);
   border-radius: 6px;
+
+  @media (max-width: $sidebar-breakpoint) {
+    position: static;
+  }
 }
 
 h3 {

@@ -17,6 +17,8 @@ nothing is uploaded anywhere.
   set a default sort and save the layout as a named view.
 - **Share** - export and import metrics and views as JSON files.
 - **Demo** - load sample players, metrics and a view from the home page to try it out.
+- **Installable** - install it as a standalone app (Install app button in Chrome and Edge, or
+  Add to Dock / Add to Home Screen in Safari). After the first visit it works offline.
 
 ## Getting your data out of Football Manager
 
@@ -25,7 +27,7 @@ nothing is uploaded anywhere.
 2. Export the players shown in that view to a CSV file with
    [FM View Exporter](https://github.com/ElectroHugin/FM-View-Exporter). Set
    `ScanColumns = true` in the plugin's config.
-3. Load the CSV file on the **Analyze** page.
+3. Load the CSV file on the **Analyse** page.
 
 ## Development
 
@@ -50,8 +52,14 @@ The app is a static site deployed to GitHub Pages by the workflow in
 In the repository settings, set **Pages > Source** to **GitHub Actions**.
 
 The build is served from `/<repository name>/`, set through the `BASE_PATH` environment variable
-(see [`vite.config.js`](vite.config.js)). Pages use hash URLs such as `/#/analyze`, so the server
+(see [`vite.config.js`](vite.config.js)). Pages use hash URLs such as `/#/analyse`, so the server
 only ever serves `index.html` and reloading or sharing any page works.
 
 Data saved in the browser belongs to the site's address: metrics and views made on `localhost`
 don't appear on the deployed site. Use Export and Import to move them.
+
+The app is a PWA built with [vite-plugin-pwa](https://vite-pwa-org.netlify.app/): the manifest
+and service worker are configured in [`vite.config.js`](vite.config.js) and the icons are in
+`public/`. When a new version is deployed, open copies show a prompt to reload, so an update never
+interrupts work. The service worker only runs in production builds; use `pnpm build` and
+`pnpm preview` to test it.

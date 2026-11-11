@@ -46,10 +46,13 @@ function emptySlots(node) {
 export function provideFormulaEditor(target, options) {
   const selectedPath = ref(null)
   const dragging = ref(false)
+  // The innermost block under the pointer, which shows its name tab.
+  const hoveredPath = ref(null)
 
   const editor = {
     selectedPath,
     dragging,
+    hoveredPath,
     columns: options.columns,
     knownColumns: options.knownColumns,
     distinctValues: options.distinctValues,

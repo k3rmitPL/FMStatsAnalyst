@@ -398,7 +398,7 @@ function formatDate(iso) {
   align-items: start;
   gap: 1rem;
 
-  @media (max-width: 1100px) {
+  @media (max-width: $sidebar-breakpoint) {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -24,7 +24,7 @@ async function fetchFile(name, type) {
 /**
  * Imports the demo metrics and view (replacing earlier copies of them) and the sample dataset
  * (reused when it was loaded before). `onProgress(percent, message)` reports each step.
- * Returns { importId, viewId } to open on the Analyze page.
+ * Returns { importId, viewId } to open on the Analyse page.
  */
 export async function loadDemo(library, onProgress = () => {}) {
   await library.load()

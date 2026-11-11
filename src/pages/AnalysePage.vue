@@ -85,7 +85,7 @@ const headerOverhang = ref(0)
 const activeViewId = ref(
   typeof route.query.view === 'string'
     ? route.query.view
-    : readPreference('analyzeView', '', (v) => typeof v === 'string'),
+    : readPreference('analyseView', '', (v) => typeof v === 'string'),
 )
 // Team whose players are highlighted in the table ('' = none). Remembered in this browser.
 const selectedTeam = usePreference('team', '', (v) => typeof v === 'string')
@@ -421,7 +421,7 @@ function deleteView() {
 onBeforeRouteLeave(() => !activeView.value || confirmDiscard())
 
 watch(activeViewId, (id) => {
-  writePreference('analyzeView', id)
+  writePreference('analyseView', id)
   if ((route.query.view ?? '') === id) return
   const query = { ...route.query }
   if (id) query.view = id
@@ -674,7 +674,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <h1>Analyze</h1>
+  <h1>Analyse</h1>
 
   <div v-if="!imports.length" class="empty-state">
     <p>No data saved yet.</p>

@@ -3,7 +3,14 @@
 // rendered recursively with this component.
 import { computed, ref } from 'vue'
 
-import { COMPARISONS, FUNCTIONS, OPERATORS, STATS, nodeCategory } from '@/services/expression'
+import {
+  COMPARISONS,
+  FUNCTIONS,
+  OPERATORS,
+  STATS,
+  blockInfo,
+  nodeCategory,
+} from '@/services/expression'
 
 import ColumnInput from './ColumnInput.vue'
 import { DRAG_TYPE, useFormulaEditor } from './editorContext'
@@ -18,11 +25,22 @@ const node = computed(() => editor.get(props.path))
 const isOver = ref(false)
 const blockEl = ref(null)
 
-const isSelected = computed(
-  () =>
-    editor.selectedPath.value?.length === props.path.length &&
-    editor.selectedPath.value.every((key, i) => key === props.path[i]),
-)
+const isPath = (path) =>
+  path?.length === props.path.length && path.every((key, i) => key === props.path[i])
+
+const isSelected = computed(() => isPath(editor.selectedPath.value))
+
+// Name tab: shown on the innermost hovered block only, so nested blocks don't all show one.
+const isHovered = computed(() => isPath(editor.hoveredPath.value) && !editor.dragging.value)
+const info = computed(() => blockInfo(node.value))
+
+function onBlockOver() {
+  editor.hoveredPath.value = props.path
+}
+
+function onBlockLeave() {
+  if (isPath(editor.hoveredPath.value)) editor.hoveredPath.value = null
+}
 
 const fn = computed(() => (node.value?.type === 'call' ? FUNCTIONS[node.value.fn] : null))
 
@@ -98,7 +116,17 @@ function fillLookupKeys() {
   >
     <span v-if="!node" class="placeholder">{{ placeholder }}</span>
 
-    <span v-else ref="blockEl" class="block" :class="[nodeCategory(node), node.type]">
+    <span
+      v-else
+      ref="blockEl"
+      class="block"
+      :class="[nodeCategory(node), node.type]"
+      @mouseover.stop="onBlockOver"
+      @mouseleave="onBlockLeave"
+    >
+      <span v-if="isHovered" class="name-tab" aria-hidden="true">
+        {{ info.name }}
+      </span>
       <span
         class="grip"
         draggable="true"
@@ -307,24 +335,48 @@ $logic: #2f9e6e;
   align-items: center;
   gap: 0.3rem;
   padding: 0.25rem 0.3rem 0.25rem 0.15rem;
-  border: 1px solid;
+  border: 1px solid color-mix(in srgb, var(--block-color) 70%, transparent);
   border-radius: 6px;
+  position: relative;
 
+  // Each category sets its colour once; the background, border and name tab use it.
   &.value {
+    --block-color: #{$value};
     background: color.change($value, $alpha: 0.18);
-    border-color: color.change($value, $alpha: 0.7);
   }
   &.math {
+    --block-color: #{$math};
     background: color.change($math, $alpha: 0.16);
-    border-color: color.change($math, $alpha: 0.7);
   }
   &.function {
+    --block-color: #{$function};
     background: color.change($function, $alpha: 0.16);
-    border-color: color.change($function, $alpha: 0.7);
   }
   &.logic {
+    --block-color: #{$logic};
     background: color.change($logic, $alpha: 0.16);
-    border-color: color.change($logic, $alpha: 0.7);
+  }
+}
+
+// A small folder-style tab on the block's top edge: "Functions · Average".
+.name-tab {
+  padding: 0.1rem 0.4rem;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: var(--block-color);
+  border-radius: 4px 4px 0 0;
+  pointer-events: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0.4rem;
+  z-index: 2;
+
+  .separator {
+    opacity: 0.6;
   }
 }
 

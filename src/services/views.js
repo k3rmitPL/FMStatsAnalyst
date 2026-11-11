@@ -74,7 +74,7 @@ export function parseViewsFile(data) {
 
 /** A view without the `groupId` that older versions stored (views are not grouped). */
 export function withoutGroup(view) {
-  const { groupId, ...rest } = view
+  const { _groupId, ...rest } = view
   return rest
 }
 

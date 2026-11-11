@@ -32,7 +32,7 @@ async function startDemo() {
     })
     const query = { import: importId }
     if (viewId) query.view = viewId
-    router.push({ path: '/analyze', query })
+    router.push({ path: '/analyse', query })
   } catch (error) {
     demoError.value = `The demo could not be loaded: ${error.message}`
   } finally {
@@ -52,7 +52,7 @@ async function startDemo() {
       </p>
       <div class="hero-actions">
         <button type="button" class="button primary" @click="scrollToDemo">Try the demo</button>
-        <RouterLink class="button" to="/analyze">Use your own data</RouterLink>
+        <RouterLink class="button" to="/analyse">Use your own data</RouterLink>
       </div>
     </section>
 
@@ -118,7 +118,7 @@ async function startDemo() {
         </li>
         <li>
           <strong>Load the file.</strong> On the
-          <RouterLink to="/analyze">Analyze</RouterLink> page, choose <em>Load CSV...</em> and pick
+          <RouterLink to="/analyse">Analyse</RouterLink> page, choose <em>Load CSV...</em> and pick
           your export.
         </li>
         <li>

@@ -338,6 +338,11 @@ function itemGroup(item) {
   max-height: 80vh;
   overflow-y: auto;
   position: sticky;
+
+  // Stacked above the editor: scroll away with the page instead of covering it.
+  @media (max-width: $sidebar-breakpoint) {
+    position: static;
+  }
 }
 
 .tree-actions {
@@ -417,7 +422,7 @@ svg {
 
 .row.item.active {
   background: color.adjust($background-color, $lightness: 9%);
-  border-left-color: #7fb7ff;
+  border-left-color: $accent-color;
 }
 
 // Plain text buttons inside rows, not the app's raised button style.
