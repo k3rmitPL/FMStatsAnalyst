@@ -26,11 +26,11 @@ import { useLibraryStore } from '@/stores/library'
 import { columnLabel } from '@/utils/columns'
 import { readPreference, usePreference, writePreference } from '@/utils/preferences'
 
-const PAGE_SIZES = [15, 30, 50, 100]
+const PAGE_SIZES = [15, 20, 30, 50, 100]
 
 // Columns frozen to the table edges by default (raw CSV / derived column names).
-const DEFAULT_FROZEN_LEFT = ['Player', 'Club', 'Age', 'Division', 'Nation', 'Position']
-const DEFAULT_FROZEN_RIGHT = ['Transfer Value Max', 'Wage Max', 'Expires', NOTES_COLUMN]
+const DEFAULT_FROZEN_LEFT = ['Player', 'Club']
+const DEFAULT_FROZEN_RIGHT = [NOTES_COLUMN]
 
 // Width of the Notes column in px; longer notes are cut off (the full text is in a tooltip).
 const NOTES_COLUMN_WIDTH = 100
@@ -40,7 +40,7 @@ const TEAM_COLUMN = 'Club'
 // Column holding each player's name.
 const PLAYER_COLUMN = 'Player'
 
-const HEADER_ANGLE = (70 * Math.PI) / 180
+const HEADER_ANGLE = (90 * Math.PI) / 180
 
 const COLUMN_DRAG_TYPE = 'application/x-fm-column'
 
@@ -1382,10 +1382,6 @@ th.shortlist-col .star {
   &.active .star {
     fill: #ffc83d;
     opacity: 1;
-  }
-
-  &:hover {
-    // background: color.adjust($background-color, $lightness: 18%);
   }
 
   &:hover:not(.active) .star {

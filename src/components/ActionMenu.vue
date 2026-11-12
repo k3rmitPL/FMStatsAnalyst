@@ -25,13 +25,14 @@ async function open() {
 }
 
 function close(returnFocus = false) {
+  console.log('close menu')
   isOpen.value = false
   if (returnFocus) toggle.value?.focus()
 }
 
 // Any enabled item closes the menu once its own click handler has run.
 function onPanelClick(event) {
-  if (event.target.closest('.menu-item:not(:disabled)')) close()
+  if (event.target.closest('.menu-item')) close()
 }
 
 function onKeydown(event) {

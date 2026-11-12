@@ -158,7 +158,7 @@ function clearAll() {
           </div>
           <button type="button" class="mini add" @click="addFilter">+ Add condition</button>
 
-          <h3>Default sort</h3>
+          <h3>Sort</h3>
           <div class="filter">
             <ColumnInput
               v-model="sortColumn"
