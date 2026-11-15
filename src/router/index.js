@@ -3,10 +3,12 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import HomePage from '@/pages/HomePage.vue'
 import AnalysePage from '@/pages/AnalysePage.vue'
 import MetricsPage from '@/pages/MetricsPage.vue'
+import ImportPage from '@/pages/ImportPage.vue'
 
 const routes = [
   { path: '/', component: HomePage },
   { path: '/analyse', component: AnalysePage },
+  { path: '/import', component: ImportPage },
   { path: '/metrics', component: MetricsPage },
 ]
 

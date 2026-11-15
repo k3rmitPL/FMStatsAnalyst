@@ -773,6 +773,10 @@ onBeforeUnmount(() => {
       the plugin's config), and load it here:
     </p>
     <CSVFileInput @imported="onImported" />
+    <p>
+      Or use the <RouterLink to="/import">advanced import</RouterLink> to merge several CSV files
+      into one dataset and add your own columns.
+    </p>
   </div>
 
   <template v-else>
@@ -788,6 +792,14 @@ onBeforeUnmount(() => {
         </label>
 
         <CSVFileInput @imported="onImported" />
+        <button
+          type="button"
+          class="short"
+          title="Merge several CSV files into one dataset, with custom columns"
+          @click="router.push('/import')"
+        >
+          Advanced import...
+        </button>
         <button type="button" class="short danger" @click="removeSelected">Delete dataset</button>
       </div>
       <div class="stick-right">
@@ -1184,6 +1196,7 @@ button.filters-button {
 
 .table-wrap {
   flex: 1 1 0;
+  align-items: start;
   margin-bottom: 1rem;
   overflow: auto;
   border: 1px solid color.adjust($background-color, $lightness: 10%);

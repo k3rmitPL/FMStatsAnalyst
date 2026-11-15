@@ -172,7 +172,7 @@ function parseDate(value) {
  * Detects how a column should be converted. Returns null when it stays as text.
  * Every non-empty value must match the same format.
  */
-function detectColumn(name, values) {
+export function detectColumn(name, values) {
   const present = values.filter((v) => !isEmpty(v))
   if (!present.length) return null
 
