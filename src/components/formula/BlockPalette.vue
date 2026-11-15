@@ -82,7 +82,7 @@ $colors: (
 
 .palette {
   position: sticky;
-  top: 1rem;
+  top: 0;
   padding: 0.75rem;
   background: color.adjust($background-color, $lightness: 3%);
   border: 1px solid color.adjust($background-color, $lightness: 12%);

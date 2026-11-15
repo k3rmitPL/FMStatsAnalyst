@@ -331,7 +331,7 @@ function itemGroup(item) {
 @use 'sass:color';
 
 .group-tree {
-  top: 1rem;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;

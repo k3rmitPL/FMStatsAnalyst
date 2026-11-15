@@ -43,7 +43,14 @@ export const useLibraryStore = defineStore('library', () => {
       ([m, v, mg]) => {
         metrics.value = m
         // Views are no longer grouped; drop group references left from older versions.
-        views.value = v.map(withoutGroup)
+        views.value = v.map(withoutGroup).sort((a, b) => {
+          const aName = a.name.toLowerCase()
+          const bName = b.name.toLowerCase()
+          if (aName < bName) return -1
+          if (aName > bName) return 1
+          return 0
+        })
+
         metricGroupList.value = mg
         loaded.value = true
         watch(metrics, (value) => saveConfig('metrics', value), { deep: true })

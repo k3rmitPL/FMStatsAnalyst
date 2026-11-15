@@ -25,7 +25,6 @@ async function open() {
 }
 
 function close(returnFocus = false) {
-  console.log('close menu')
   isOpen.value = false
   if (returnFocus) toggle.value?.focus()
 }

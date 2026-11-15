@@ -8,7 +8,7 @@ import GroupTree from '@/components/GroupTree.vue'
 import { provideFormulaEditor } from '@/components/formula/editorContext'
 import { useDataset } from '@/composables/useDataset'
 import { useRememberedSelection } from '@/composables/useRememberedSelection'
-import { toText } from '@/services/expression'
+import { referencedColumns, toText } from '@/services/expression'
 import { downloadJson, jsonFileName, pickFile } from '@/services/fileTransfer'
 import { computeMetrics, metricsFile, newMetric } from '@/services/metrics'
 import { NA } from '@/services/transform'
@@ -95,11 +95,28 @@ const missingCount = computed(() => {
   return preview.value.rows.filter((r) => r[metric.value.name] === NA).length
 })
 
+// Columns the formula reads, shown after the metric in the preview, in formula order.
+const formulaColumns = computed(() => {
+  if (!metric.value) return []
+  return [...referencedColumns(metric.value.expression)].filter(
+    (c) => c !== metric.value.name && knownColumns.value.has(c),
+  )
+})
+
 const formulaText = computed(() =>
   metric.value ? toText(metric.value.expression, (c) => columnLabel(c)) : '',
 )
 
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 })
+const dateFormat = new Intl.DateTimeFormat()
+
+function formatCell(value) {
+  if (value == null) return ''
+  if (typeof value === 'boolean') return value ? '✓' : ''
+  if (value instanceof Date) return dateFormat.format(value)
+  if (typeof value === 'number') return numberFormat.format(value)
+  return String(value)
+}
 
 function metricStatus(m) {
   return {
@@ -323,24 +340,37 @@ function formatDate(iso) {
           Range {{ numberFormat.format(range.min) }} – {{ numberFormat.format(range.max) }}
           <span v-if="missingCount"> · {{ missingCount }} players without a value</span>
         </p>
-        <table v-if="topRows.length" class="preview">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Club</th>
-              <th>Position</th>
-              <th class="numeric">{{ metric.name }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, i) in topRows" :key="i">
-              <td>{{ row.Player }}</td>
-              <td>{{ row.Club }}</td>
-              <td>{{ row.Position }}</td>
-              <td class="numeric">{{ numberFormat.format(row[metric.name]) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-if="topRows.length" class="preview-scroll">
+          <table class="preview">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Club</th>
+                <th>Position</th>
+                <th class="numeric">{{ metric.name }}</th>
+                <th
+                  v-for="col in formulaColumns"
+                  :key="col"
+                  class="numeric source"
+                  :title="col"
+                >
+                  {{ columnLabel(col, columnInfo[col]) }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in topRows" :key="i">
+                <td>{{ row.Player }}</td>
+                <td>{{ row.Club }}</td>
+                <td>{{ row.Position }}</td>
+                <td class="numeric">{{ numberFormat.format(row[metric.name]) }}</td>
+                <td v-for="col in formulaColumns" :key="col" class="numeric source">
+                  {{ formatCell(row[col]) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </template>
     </section>
 
@@ -406,6 +436,7 @@ function formatDate(iso) {
 .editor {
   min-width: 0;
   padding: 1rem;
+  margin-bottom: 1rem;
   background: color.adjust($background-color, $lightness: 2%);
   border: 1px solid color.adjust($background-color, $lightness: 10%);
   border-radius: 6px;
@@ -517,20 +548,35 @@ function formatDate(iso) {
   opacity: 0.7;
 }
 
-.preview {
+.preview-scroll {
+  max-width: 100%;
   margin-top: 0.5rem;
+  overflow-x: auto;
+}
+
+.preview {
   font-size: 0.85rem;
   border-collapse: collapse;
 
   th,
   td {
-    padding: 0.2rem 0.75rem 0.2rem 0;
+    padding: 0.2rem 0.75rem;
     text-align: left;
+    white-space: nowrap;
     border-bottom: 1px solid color.adjust($background-color, $lightness: 6%);
+  }
+
+  tbody tr:nth-child(even) {
+    background: color.adjust($background-color, $lightness: -3%);
   }
 
   .numeric {
     text-align: center;
+  }
+
+  th.source {
+    font-weight: normal;
+    opacity: 0.8;
   }
 }
 </style>

@@ -802,7 +802,7 @@ onBeforeUnmount(() => {
           type="button"
           class="short filters-button"
           :class="{ active: filterCount }"
-          title="Positions, conditions and default sort"
+          title="Positions and conditions"
           @click="filtersOpen = true"
         >
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -1183,9 +1183,11 @@ button.filters-button {
 }
 
 .table-wrap {
+  flex: 1 1 0;
   margin-bottom: 1rem;
   overflow: auto;
   border: 1px solid color.adjust($background-color, $lightness: 10%);
+  display: flex;
 }
 
 table {
