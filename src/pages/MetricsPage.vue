@@ -305,6 +305,10 @@ function formatDate(iso) {
           <label
             ><input v-model="metric.colorScale" type="checkbox" /> Colour cells red → green</label
           >
+          <label title="Lower is better: green for low values, red for high ones"
+            ><input v-model="metric.reverseColors" type="checkbox" /> Reverse colouring (lower is
+            better)</label
+          >
           <label>
             Decimals
             <select v-model="metric.decimals">
@@ -348,12 +352,7 @@ function formatDate(iso) {
                 <th>Club</th>
                 <th>Position</th>
                 <th class="numeric">{{ metric.name }}</th>
-                <th
-                  v-for="col in formulaColumns"
-                  :key="col"
-                  class="numeric source"
-                  :title="col"
-                >
+                <th v-for="col in formulaColumns" :key="col" class="numeric source" :title="col">
                   {{ columnLabel(col, columnInfo[col]) }}
                 </th>
               </tr>

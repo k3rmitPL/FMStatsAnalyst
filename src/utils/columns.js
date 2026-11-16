@@ -162,6 +162,44 @@ const COLUMN_LABELS = {
   Starts: 'Played From Start',
 }
 
+// Numeric columns where a lower value is better, for colouring players against each other.
+// Money columns (transfer value, wage, asking price) are found by their currency unit instead.
+const LOWER_IS_BETTER = new Set([
+  'Age',
+  'Mins/Gl',
+  'MLG',
+  'MLG/90',
+  'Fouls',
+  'Fouls/90',
+  'Yel',
+  'Yel/90',
+  'Red',
+  'Red/90',
+  'Off',
+  'Off/90',
+  'Poss Lost/90',
+  'Hdrs L/90',
+  'Goals Conceded',
+  'Con/90',
+  'Tcon/90',
+  'International Goals Conceded',
+])
+const CURRENCY_RE = /[€$£¥]/
+
+// Numeric columns where better or worse makes no sense.
+const NOT_RANKED = new Set(['Unique ID'])
+
+/** Whether players can be ranked by a column (better / worse), from its columnInfo entry. */
+export function isRankedColumn(column, info) {
+  return info?.type === 'number' && !NOT_RANKED.has(column)
+}
+
+/** Whether a lower value is better in a column (a cost, an error count, or a reversed metric). */
+export function isLowerBetter(column, info) {
+  if (info?.metric) return !!info.reverseColors
+  return LOWER_IS_BETTER.has(column) || CURRENCY_RE.test(info?.unit ?? '')
+}
+
 /**
  * Returns the display label for a column header.
  * `info` is the column's entry from the import's columnInfo; its unit is appended, e.g. "Height (cm)".

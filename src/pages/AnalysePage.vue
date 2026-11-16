@@ -6,6 +6,7 @@ import ActionMenu from '@/components/ActionMenu.vue'
 import ColumnPicker from '@/components/ColumnPicker.vue'
 import CSVFileInput from '@/components/CSVFileInput.vue'
 import NotesDialog from '@/components/NotesDialog.vue'
+import PlayerSelect from '@/components/PlayerSelect.vue'
 import SaveViewDialog from '@/components/SaveViewDialog.vue'
 import TeamSelect from '@/components/TeamSelect.vue'
 import ViewFiltersDialog from '@/components/ViewFiltersDialog.vue'
@@ -21,10 +22,11 @@ import {
 import { downloadJson, jsonFileName, pickFile } from '@/services/fileTransfer'
 import { computeMetrics } from '@/services/metrics'
 import { NA, NOTES_COLUMN } from '@/services/transform'
-import { newView, viewRowFilter, viewsFile } from '@/services/views'
+import { newView, normalizeFilter, viewRowFilter, viewsFile } from '@/services/views'
 import { useLibraryStore } from '@/stores/library'
-import { columnLabel } from '@/utils/columns'
+import { columnLabel, isLowerBetter, isRankedColumn } from '@/utils/columns'
 import { readPreference, usePreference, writePreference } from '@/utils/preferences'
+import { foldText } from '@/utils/text'
 
 const PAGE_SIZES = [15, 20, 30, 50, 100]
 
@@ -39,6 +41,20 @@ const NOTES_COLUMN_WIDTH = 100
 const TEAM_COLUMN = 'Club'
 // Column holding each player's name.
 const PLAYER_COLUMN = 'Player'
+// Columns described next to the player's name in the Compare lookup, when the dataset has them.
+const LEAGUE_COLUMN = 'Division'
+const POSITION_COLUMN = 'Position'
+const AGE_COLUMN = 'Age'
+
+// Colours against the compared player: green = better, red = worse (the full colours are
+// $compare-better-color and $compare-worse-color in _variables.scss). The share of the colour
+// mixed into the cell's background grows from MIN % (a value just past the compared player's)
+// to MAX % (the dataset's best or worst value).
+const COMPARE_MIN_STRENGTH = 6
+const COMPARE_MAX_STRENGTH = 100
+// While comparing, metrics with their own red → green scale use the comparison colours too.
+// Set to false to keep their scale and colour only the other columns against the player.
+const COMPARE_OVERRIDES_COLOR_SCALE = true
 
 const HEADER_ANGLE = (90 * Math.PI) / 180
 
@@ -66,8 +82,8 @@ const page = ref(1)
 // Remembered in this browser.
 const pageSize = usePreference('pageSize', PAGE_SIZES[0], (v) => PAGE_SIZES.includes(v))
 // The table shows a working copy of the selected view (or of the default layout when none is
-// selected). Columns are set up in the table itself, positions, conditions and the default sort
-// in the Filters dialog. Save writes the copy back to the view, Revert reloads it.
+// selected). Columns and sorting are set up in the table itself, positions and conditions in the
+// Filters dialog. Save writes the copy back to the view, Revert reloads it.
 // Visible columns in order; null = every column of the dataset.
 const shownColumns = ref(null)
 const frozenLeft = ref([...DEFAULT_FROZEN_LEFT])
@@ -112,6 +128,42 @@ const selectedTeam = usePreference('team', '', (v) => typeof v === 'string')
 const shortlistOnly = usePreference('shortlistOnly', false, (v) => typeof v === 'boolean')
 // Header of the shortlist column, always the first one; frozen columns start after it.
 const shortlistHeader = ref(null)
+// Player the others are compared to, by row id (null = none). Each dataset remembers its own in
+// this browser (row ids belong to a dataset), restored once the dataset's rows are loaded.
+const comparePlayerId = ref(null)
+const COMPARE_PREFERENCE = 'comparePlayers' // { [datasetId]: rowId }
+const isRecord = (v) => v != null && typeof v === 'object' && !Array.isArray(v)
+
+/** Stores the compare player of a dataset, dropping entries of datasets that no longer exist. */
+function rememberComparePlayer(datasetId, rowId) {
+  if (datasetId == null) return
+  const known = new Set(imports.value.map((i) => String(i.id)))
+  const saved = Object.fromEntries(
+    Object.entries(readPreference(COMPARE_PREFERENCE, {}, isRecord)).filter(([id]) =>
+      known.has(id),
+    ),
+  )
+  if (rowId == null) delete saved[datasetId]
+  else saved[datasetId] = rowId
+  writePreference(COMPARE_PREFERENCE, saved)
+}
+
+/** The remembered compare player of a dataset, if it is still one of its rows. */
+function rememberedComparePlayer(datasetId, datasetRows) {
+  const rowId = readPreference(COMPARE_PREFERENCE, {}, isRecord)[datasetId]
+  return datasetRows.some((r) => r[ROW_ID] === rowId) ? rowId : null
+}
+// Floating comparison row: the compared player's values, shown next to the hovered row.
+const tableWrap = ref(null)
+const mainTable = ref(null)
+const tableBody = ref(null)
+const floatEl = ref(null)
+// Index of the hovered row in `pageRows` (null = none).
+const hoveredIndex = ref(null)
+// Position of the floating row in the table wrapper's content, px (null = not placed yet).
+const floatTop = ref(null)
+// Measured widths of the header cells, which the floating row copies.
+const columnWidths = ref({ shortlist: 0, columns: {}, table: 0 })
 
 const selectedImport = computed(() => imports.value.find((i) => i.id === selectedId.value))
 const datasetColumns = computed(() => selectedImport.value?.columns ?? [])
@@ -164,6 +216,31 @@ const teams = computed(() => {
   return [...names].sort((a, b) => a.localeCompare(b))
 })
 
+// Players for the Compare lookup, alphabetically; empty when the dataset has no player names.
+// Club, league, positions and age are added only when the dataset has those columns and values.
+const comparePlayers = computed(() => {
+  const available = new Set(datasetColumns.value)
+  if (!available.has(PLAYER_COLUMN)) return []
+  const text = (row, col) => {
+    if (!available.has(col) || isEmpty(row[col])) return ''
+    return formatCell(row[col]).trim()
+  }
+  const players = []
+  for (const row of rows.value) {
+    const name = text(row, PLAYER_COLUMN)
+    if (!name || row[ROW_ID] == null) continue
+    const age = text(row, AGE_COLUMN)
+    const details = [
+      text(row, TEAM_COLUMN),
+      text(row, LEAGUE_COLUMN),
+      text(row, POSITION_COLUMN),
+      age && `Age ${age}`,
+    ].filter(Boolean)
+    players.push({ id: row[ROW_ID], name, details })
+  }
+  return players.sort((a, b) => a.name.localeCompare(b.name))
+})
+
 function isTeamRow(row) {
   return selectedTeam.value !== '' && row[TEAM_COLUMN] === selectedTeam.value
 }
@@ -212,7 +289,7 @@ function resolveLayout(source) {
     frozenLeft: left,
     frozenRight: right,
     positions: source.positions,
-    filters: source.filters.map((f) => ({ column: f.column, cmp: f.cmp, value: String(f.value) })),
+    filters: source.filters.map(normalizeFilter),
     sort: source.sort,
   }
 }
@@ -261,7 +338,9 @@ const hiddenColumns = computed({
 const activePositions = computed(() =>
   positions.value.filter((pos) => columnInfo.value[pos]?.type === 'boolean'),
 )
-const filterCount = computed(() => activePositions.value.length + filters.value.length)
+const filterCount = computed(
+  () => activePositions.value.length + filters.value.filter((f) => f.enabled !== false).length,
+)
 const rowFilter = computed(() =>
   filterCount.value
     ? viewRowFilter({ positions: activePositions.value, filters: filters.value })
@@ -279,15 +358,21 @@ const viewRows = computed(() =>
 const listedRows = computed(() =>
   shortlistOnly.value ? viewRows.value.filter(isShortlisted) : viewRows.value,
 )
+// Every row's values as shown, prepared for the search box (ignoring case and accents). Values are
+// kept apart by a character nobody types, so a search can't match across two columns. Built only
+// once something is searched for, then reused while typing.
+const searchTexts = computed(() => {
+  if (!search.value.trim()) return null
+  const texts = new Map()
+  for (const row of tableRows.value) {
+    texts.set(row, foldText(columns.value.map((col) => formatCell(row[col])).join('\u0000')))
+  }
+  return texts
+})
 const filteredRows = computed(() => {
-  const term = search.value.trim().toLowerCase()
+  const term = foldText(search.value.trim())
   if (!term) return listedRows.value
-  return listedRows.value.filter((row) =>
-    columns.value.some((col) => {
-      const value = formatCell(row[col])
-      return value !== '' && value.toLowerCase().includes(term)
-    }),
-  )
+  return listedRows.value.filter((row) => searchTexts.value.get(row)?.includes(term))
 })
 
 const sortedRows = computed(() => {
@@ -309,6 +394,24 @@ const pageRows = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return sortedRows.value.slice(start, start + pageSize.value)
 })
+
+// Row of the compared player, with metric values (null when none is chosen).
+const compareRow = computed(() =>
+  comparePlayerId.value == null
+    ? null
+    : (tableRows.value.find((r) => r[ROW_ID] === comparePlayerId.value) ?? null),
+)
+// The floating row shows while another player's row is hovered.
+const showFloat = computed(() => {
+  const hovered = hoveredIndex.value == null ? null : pageRows.value[hoveredIndex.value]
+  return Boolean(compareRow.value && hovered && hovered[ROW_ID] !== comparePlayerId.value)
+})
+
+/** Fixed width for a column of the floating row, copied from the table's header. */
+function floatColumnStyle(width) {
+  const px = `${width ?? 0}px`
+  return { width: px, minWidth: px, maxWidth: px }
+}
 
 function isEmpty(value) {
   return value == null || value === '' || value === NA
@@ -379,17 +482,53 @@ async function saveNotes(text) {
   }
 }
 
-/** Background for metrics with a colour scale: red (lowest) to green (highest). */
+/**
+ * Cell colours. While a player is compared, numbers are coloured against theirs (see
+ * `compareStyle`); otherwise metrics with a colour scale go from red (worst) to green (best).
+ */
 function cellStyle(col, value) {
   const style = { ...stickyStyle(col), ...widthStyle(col) }
-  if (!columnInfo.value[col]?.colorScale || typeof value !== 'number') return style
+  const info = columnInfo.value[col]
+  if (typeof value !== 'number') return style
+  const comparing = compareRow.value && isRankedColumn(col, info)
+  if (comparing && (COMPARE_OVERRIDES_COLOR_SCALE || !info.colorScale)) {
+    return { ...style, ...compareStyle(col, value) }
+  }
+  if (!info?.colorScale) return style
   const range = allStats.value[col]
   const span = range ? range.max - range.min : 0
-  const progress = span > 0 ? Math.round(((value - range.min) / span) * 100) : 100
+  let progress = span > 0 ? Math.round(((value - range.min) / span) * 100) : 100
+  if (isLowerBetter(col, info)) progress = 100 - progress
+  // return {
+  //   ...style,
+  //   backgroundColor: `color-mix(in lab, #ff9797, #82ff7d ${progress}%)`,
+  //   color: '#000',
+  // }
   return {
     ...style,
-    backgroundColor: `color-mix(in lab, #ff9797, #82ff7d ${progress}%)`,
-    color: '#000',
+    backgroundColor: `color-mix(in lab, var(--compare-worse), var(--compare-better) ${progress}%)`,
+    // color: '#000',
+  }
+}
+
+/**
+ * Colours a value against the compared player's: green when better, red when worse. The colour
+ * is strongest at the dataset's best (or worst) value and fades to the cell's own background
+ * (`--cell-background`, which follows hovered and team rows) at the compared player's value.
+ */
+function compareStyle(col, value) {
+  const base = compareRow.value[col]
+  const range = allStats.value[col]
+  if (typeof base !== 'number' || !range || value === base) return {}
+  const higher = value > base
+  const better = higher !== isLowerBetter(col, columnInfo.value[col])
+  // Distance from the compared value towards the dataset's end on this side, 0 to 1.
+  const end = higher ? range.max : range.min
+  const share = end === base ? 1 : Math.min(1, Math.abs((value - base) / (end - base)))
+  const strength = COMPARE_MIN_STRENGTH + share * (COMPARE_MAX_STRENGTH - COMPARE_MIN_STRENGTH)
+  const color = better ? 'var(--compare-better)' : 'var(--compare-worse)'
+  return {
+    backgroundColor: `color-mix(in srgb, ${color} ${strength.toFixed(1)}%, var(--cell-background))`,
   }
 }
 
@@ -646,6 +785,42 @@ function updateLayout() {
     right += headerCells.get(col)?.getBoundingClientRect().width ?? 0
   }
   stickyOffsets.value = offsets
+
+  // Column widths, so the floating comparison row lines up with the table.
+  const widths = {}
+  for (const [col, th] of headerCells) widths[col] = th.getBoundingClientRect().width
+  columnWidths.value = {
+    shortlist: shortlistHeader.value?.getBoundingClientRect().width ?? 0,
+    columns: widths,
+    table: mainTable.value?.getBoundingClientRect().width ?? 0,
+  }
+  positionFloat()
+}
+
+/**
+ * Places the floating comparison row just above the hovered row, or just below it when there is
+ * no room above (it would cover the header). Positions are in the scrolled content of the table
+ * wrapper, so the floating row scrolls together with the table.
+ */
+function positionFloat() {
+  const wrap = tableWrap.value
+  const tr = hoveredIndex.value == null ? null : tableBody.value?.rows[hoveredIndex.value]
+  if (!showFloat.value || !wrap || !tr || !floatEl.value) {
+    floatTop.value = null
+    return
+  }
+  const height = floatEl.value.offsetHeight
+  const wrapRect = wrap.getBoundingClientRect()
+  const rowRect = tr.getBoundingClientRect()
+  const rowTop = rowRect.top - wrapRect.top - wrap.clientTop + wrap.scrollTop
+  const headerBottom = wrap.scrollTop + (mainTable.value?.tHead?.offsetHeight ?? 0)
+  floatTop.value =
+    rowTop - height >= headerBottom ? rowTop - height - 5 : rowTop + rowRect.height + 5
+}
+
+function onBodyPointerOver(event) {
+  const tr = event.target.closest('tr')
+  hoveredIndex.value = tr && tr.parentElement === tableBody.value ? tr.sectionRowIndex : null
 }
 
 /** Sizes the header row to fit the longest rotated label (layout sizes ignore transforms). */
@@ -680,6 +855,9 @@ function measureRotatedHeaders() {
 }
 
 watch([displayColumns, pageRows, rotateHeaders], () => nextTick(updateLayout))
+watch([hoveredIndex, showFloat], () => nextTick(positionFloat))
+// Another page shows other rows; the floating row waits for the pointer to move again.
+watch(pageRows, () => (hoveredIndex.value = null))
 
 function toggleSort(col) {
   if (sortKey.value === col) {
@@ -727,6 +905,7 @@ async function removeSelected() {
 
 watch(selectedId, async (id) => {
   search.value = ''
+  comparePlayerId.value = null
   page.value = 1
   rows.value = []
   stats.value = {}
@@ -738,6 +917,7 @@ watch(selectedId, async (id) => {
     const [loadedRows, loadedStats] = await Promise.all([getRows(id), getStats(id)])
     rows.value = loadedRows
     stats.value = loadedStats
+    comparePlayerId.value = rememberedComparePlayer(id, loadedRows)
   } finally {
     isLoading.value = false
   }
@@ -928,10 +1108,18 @@ onBeforeUnmount(() => {
             >(filtered from {{ rows.length }})</span
           >
         </p>
+        <PlayerSelect
+          v-if="comparePlayers.length"
+          v-model="comparePlayerId"
+          :players="comparePlayers"
+          @update:model-value="(rowId) => rememberComparePlayer(selectedId, rowId)"
+          label="Compare"
+        />
       </div>
 
-      <div class="table-wrap">
+      <div ref="tableWrap" class="table-wrap" @pointerleave="hoveredIndex = null">
         <table
+          ref="mainTable"
           :class="{ 'rotated-headers': rotateHeaders }"
           :style="
             rotateHeaders
@@ -1012,7 +1200,7 @@ onBeforeUnmount(() => {
               ></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody ref="tableBody" @pointerover="onBodyPointerOver">
             <tr v-for="(row, i) in pageRows" :key="i" :class="{ 'team-row': isTeamRow(row) }">
               <td
                 class="shortlist-col frozen-left"
@@ -1068,6 +1256,64 @@ onBeforeUnmount(() => {
             </tr>
           </tbody>
         </table>
+
+        <!-- The compared player's row, floating next to the hovered row. It ignores the pointer,
+             so moving onto it hovers the row underneath and the floating row follows. -->
+        <div
+          v-if="showFloat"
+          ref="floatEl"
+          class="compare-float"
+          :class="{ placed: floatTop != null }"
+          :style="{
+            top: floatTop != null ? `${floatTop}px` : undefined,
+            width: `${columnWidths.table}px`,
+          }"
+          aria-hidden="true"
+        >
+          <table>
+            <colgroup>
+              <col :style="floatColumnStyle(columnWidths.shortlist)" />
+              <col
+                v-for="col in displayColumns"
+                :key="col"
+                :style="floatColumnStyle(columnWidths.columns[col])"
+              />
+              <col v-if="rotateHeaders" :style="floatColumnStyle(headerOverhang)" />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td
+                  class="shortlist-col frozen-left"
+                  :class="{ 'frozen-edge-left': !visibleLeft.length }"
+                >
+                  <span class="star-toggle" :class="{ active: isShortlisted(compareRow) }">
+                    <svg class="star" viewBox="0 0 16 16">
+                      <path :d="STAR_PATH" />
+                    </svg>
+                  </span>
+                </td>
+                <td
+                  v-for="col in displayColumns"
+                  :key="col"
+                  :class="{
+                    numeric: columnInfo[col]?.type === 'number',
+                    boolean: columnInfo[col]?.type === 'boolean',
+                    ...frozenClass(col),
+                  }"
+                  :style="cellStyle(col, compareRow[col])"
+                >
+                  {{ formatCell(compareRow[col]) }}
+                </td>
+                <td
+                  v-if="rotateHeaders"
+                  class="filler"
+                  :class="{ 'frozen-right': visibleRight.length }"
+                  :style="{ ...fillerStyle, zIndex: undefined }"
+                ></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="pager" v-if="sortedRows.length > PAGE_SIZES[0]">
@@ -1089,7 +1335,6 @@ onBeforeUnmount(() => {
       v-model:open="filtersOpen"
       v-model:positions="positions"
       v-model:filters="filters"
-      v-model:sort="sort"
       :columns="columns"
       :column-info="columnInfo"
       :match-count="viewRows.length"
@@ -1132,7 +1377,7 @@ button.filters-button {
   }
 
   &.active svg {
-    color: #4fd39a;
+    color: $accent-color;
   }
 
   .count {
@@ -1141,7 +1386,7 @@ button.filters-button {
     font-size: 0.75rem;
     line-height: 1.1rem;
     text-align: center;
-    background: #2f9e6e;
+    background: color.adjust($accent-color, $lightness: -10%);
     border-radius: 0.55rem;
   }
 }
@@ -1177,6 +1422,7 @@ button.filters-button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 1.5rem;
   margin-bottom: 0.5rem;
 }
@@ -1201,6 +1447,49 @@ button.filters-button {
   overflow: auto;
   border: 1px solid color.adjust($background-color, $lightness: 10%);
   display: flex;
+}
+
+.table-wrap {
+  position: relative;
+  // For the comparison colours, which are set inline (see compareStyle).
+  --compare-better: #{$compare-better-color};
+  --compare-worse: #{$compare-worse-color};
+}
+
+// Floating comparison row: a one-row table with the main table's column widths, lifted off the
+// table with a shadow. Below the sticky header (z-index 2+) but above the body cells.
+.compare-float {
+  position: absolute;
+  z-index: 100;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 1px color.adjust($background-color, $lightness: 30%),
+    0 5px 10px color.adjust($background-color, $lightness: -5%);
+
+  &.placed {
+    visibility: visible;
+    transition: top 0.08s ease-out;
+  }
+
+  table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  td {
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    --cell-background: #{color.adjust($background-color, $lightness: 9%)};
+    border-bottom: 0;
+  }
+
+  .star-toggle {
+    display: inline-block;
+  }
 }
 
 table {
@@ -1244,9 +1533,11 @@ th {
   }
 }
 
-// Opaque cells, so frozen columns cover the scrolling middle.
+// Opaque cells, so frozen columns cover the scrolling middle. Rows change the background through
+// --cell-background, which the comparison colours are mixed into.
 td {
-  background: $background-color;
+  --cell-background: #{$background-color};
+  background: var(--cell-background);
 }
 
 .th-inner {
@@ -1468,7 +1759,7 @@ table:not(.rotated-headers) th.notes {
 }
 
 tbody tr:hover td {
-  background: color.adjust($background-color, $lightness: 4%);
+  --cell-background: #{color.adjust($background-color, $lightness: 4%)};
 }
 
 // Players of the selected team: tinted cells and an accent bar on the first column.
@@ -1476,11 +1767,11 @@ $team-accent: #ffd166;
 
 tbody tr.team-row {
   td {
-    background: color-mix(in srgb, $team-accent 14%, $background-color);
+    --cell-background: #{color-mix(in srgb, $team-accent 14%, $background-color)};
   }
 
   &:hover td {
-    background: color-mix(in srgb, $team-accent 22%, $background-color);
+    --cell-background: #{color-mix(in srgb, $team-accent 22%, $background-color)};
   }
 
   td:first-child {

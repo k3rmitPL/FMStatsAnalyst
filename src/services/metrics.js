@@ -8,6 +8,8 @@
 //     normalize,           rescale results to 0–100 (min → 0, max → 100) across the dataset
 //     decimals,            round the final value (null = no rounding)
 //     colorScale,          colour table cells from red (low) to green (high)
+//     reverseColors,       lower is better: flips red and green, in the colour scale and when
+//                          comparing players
 //   }
 // Metrics can use other metrics' columns; they are computed in dependency order.
 
@@ -33,6 +35,7 @@ export function newMetric(name = 'New metric') {
     normalize: false,
     decimals: 2,
     colorScale: false,
+    reverseColors: false,
   }
 }
 
@@ -182,7 +185,12 @@ export function computeMetrics(sourceRows, metrics, columns = []) {
     })
 
     added.push(metric.name)
-    columnInfo[metric.name] = { type: 'number', metric: true, colorScale: !!metric.colorScale }
+    columnInfo[metric.name] = {
+      type: 'number',
+      metric: true,
+      colorScale: !!metric.colorScale,
+      reverseColors: !!metric.reverseColors,
+    }
     if (min !== Infinity) stats[metric.name] = { min, max }
   }
 

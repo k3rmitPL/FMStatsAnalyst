@@ -4,11 +4,15 @@
 //   {
 //     id, name, description,
 //     positions: ['DC', ...],       show players who can play any of these (empty = everyone)
-//     filters: [{ column, cmp, value }],   extra conditions, all must match (e.g. Minutes ≥ 600)
+//     filters: [{ column, cmp, value, join: 'and' | 'or', enabled }],   extra conditions
+//       (e.g. Minutes ≥ 600); an OR filter joins the group of the AND filter before it, every
+//       group must match, and switched-off filters (enabled: false) are ignored
 //     columns: ['DC Score', ...],   visible columns, in order
 //     frozenLeft: [...], frozenRight: [...],   columns stuck to the table edges
 //     sort: { column, direction: 'asc' | 'desc' } | null,
 //   }
+
+import { foldText, includesText } from '@/utils/text'
 
 import { COMPARISONS, toNumber } from './expression'
 
@@ -36,27 +40,55 @@ function matchesFilter(row, filter) {
   if (!filter.column) return true
   const raw = row[filter.column]
   if (filter.cmp === 'contains' || filter.cmp === 'notContains') {
-    const has = String(raw ?? '')
-      .toLowerCase()
-      .includes(String(filter.value ?? '').toLowerCase())
+    const has = includesText(raw, filter.value)
     return filter.cmp === 'contains' ? has : !has
   }
   const compare = COMPARISONS[filter.cmp]?.apply
   if (!compare) return true
   const a = toNumber(raw)
   const b = Number(filter.value)
-  // Numbers compare as numbers; anything else (text, dates) compares as text.
+  // Numbers compare as numbers; anything else (text, dates) compares as text, ignoring case and
+  // accents.
   if (a != null && filter.value !== '' && Number.isFinite(b)) return compare(a, b)
-  return compare(String(raw ?? ''), String(filter.value ?? ''))
+  return compare(foldText(raw), foldText(filter.value))
+}
+
+/** A filter with its optional fields filled in (older views have no `join` or `enabled`). */
+export function normalizeFilter(filter, index = 1) {
+  return {
+    column: filter.column ?? '',
+    cmp: filter.cmp,
+    value: String(filter.value ?? ''),
+    join: index > 0 && filter.join === 'or' ? 'or' : 'and',
+    enabled: filter.enabled !== false,
+  }
+}
+
+/**
+ * Splits filters into groups: each AND filter starts a group and the OR filters after it join it.
+ * The first filter always starts a group. Returns arrays of indexes into `filters`.
+ */
+export function filterGroups(filters) {
+  const groups = []
+  filters.forEach((f, i) => {
+    if (i === 0 || f.join !== 'or' || !groups.length) groups.push([i])
+    else groups[groups.length - 1].push(i)
+  })
+  return groups
 }
 
 /** Returns a row predicate for the view's position and column filters. */
 export function viewRowFilter(view) {
   const positions = view?.positions ?? []
-  const filters = (view?.filters ?? []).filter((f) => f.column)
+  const filters = view?.filters ?? []
+  // Every group must match; within a group any active filter may match. Switched-off and
+  // incomplete filters are skipped, and a group left with none of them matches everything.
+  const groups = filterGroups(filters)
+    .map((group) => group.map((i) => filters[i]).filter((f) => f.column && f.enabled !== false))
+    .filter((group) => group.length)
   return (row) =>
     (!positions.length || positions.some((p) => row[p] === true)) &&
-    filters.every((f) => matchesFilter(row, f))
+    groups.every((group) => group.some((f) => matchesFilter(row, f)))
 }
 
 export function parseViewsFile(data) {

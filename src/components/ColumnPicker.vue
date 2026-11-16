@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { foldText } from '@/utils/text'
+
 const props = defineProps({
   // Raw column names, in table order.
   columns: { type: Array, required: true },
@@ -19,10 +21,10 @@ const filterInput = ref(null)
 const visibleCount = computed(() => props.columns.filter((c) => !hidden.value.has(c)).length)
 
 const filteredColumns = computed(() => {
-  const term = filter.value.trim().toLowerCase()
+  const term = foldText(filter.value.trim())
   if (!term) return props.columns
   return props.columns.filter(
-    (col) => col.toLowerCase().includes(term) || props.label(col).toLowerCase().includes(term),
+    (col) => foldText(col).includes(term) || foldText(props.label(col)).includes(term),
   )
 })
 

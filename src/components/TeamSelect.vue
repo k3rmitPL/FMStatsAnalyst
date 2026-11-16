@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { foldText } from '@/utils/text'
+
 const props = defineProps({
   // Team names to choose from, in display order.
   teams: { type: Array, required: true },
@@ -18,9 +20,9 @@ const filterInput = ref(null)
 const list = ref(null)
 
 const filteredTeams = computed(() => {
-  const term = filter.value.trim().toLowerCase()
+  const term = foldText(filter.value.trim())
   if (!term) return props.teams
-  return props.teams.filter((t) => t.toLowerCase().includes(term))
+  return props.teams.filter((t) => foldText(t).includes(term))
 })
 
 watch(filteredTeams, () => {

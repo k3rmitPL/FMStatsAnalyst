@@ -8,6 +8,11 @@ $background-color: #1c2131;
 $card-background: color.adjust($background-color, $lightness: 3%);
 $card-border: color.adjust($background-color, $lightness: 12%);
 
+// Analyse table, comparing players: the full colours for a value far better or worse than the
+// compared player's. Closer values mix less of them into the cell's background.
+$compare-better-color: #1f9d4c;
+$compare-worse-color: #c43c3c;
+
 // Below this width the Metrics page stacks its columns (list, editor, palette), so the side
 // columns stop being sticky.
 $sidebar-breakpoint: 1100px;
