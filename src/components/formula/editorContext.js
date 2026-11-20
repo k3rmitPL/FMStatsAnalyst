@@ -23,20 +23,52 @@ function isPrefix(prefix, path) {
   return prefix.length <= path.length && prefix.every((key, i) => path[i] === key)
 }
 
-/** Paths of empty slots inside a node, in reading order. */
-function emptySlots(node) {
+/** Paths of all child slots of a node (filled or not), in reading order. */
+function childSlots(node) {
   switch (node.type) {
     case 'op':
-      return ['left', 'right'].filter((k) => !node[k]).map((k) => [k])
+      return [['left'], ['right']]
     case 'call':
-      return node.args.flatMap((a, i) => (a ? [] : [['args', i]]))
+      return node.args.map((_, i) => ['args', i])
     case 'if':
-      return ['left', 'right', 'then', 'else'].filter((k) => !node[k]).map((k) => [k])
+      return [['left'], ['right'], ['then'], ['else']]
     case 'weighted':
-      return node.items.flatMap((item, i) => (item.node ? [] : [['items', i, 'node']]))
+      return node.items.map((_, i) => ['items', i, 'node'])
     default:
       return []
   }
+}
+
+/** Paths of empty slots inside a node, in reading order. */
+function emptySlots(node) {
+  return childSlots(node).filter((slot) => !getAt(node, slot))
+}
+
+/**
+ * Number of blocks under `path` that would be lost if the block at `keep` (a descendant)
+ * replaced it: everything except `keep`'s subtree and the blocks wrapping it.
+ */
+function blocksLostByUnwrap(root, path, keep) {
+  let count = 0
+  const walk = (current) => {
+    if (isPrefix(keep, current)) return
+    const node = getAt(root, current)
+    if (!node) return
+    if (!isPrefix(current, keep)) count++
+    for (const slot of childSlots(node)) walk([...current, ...slot])
+  }
+  walk(path)
+  return count
+}
+
+/** Number of blocks in a subtree, the node itself included. */
+function countBlocks(node) {
+  if (!node) return 0
+  return 1 + childSlots(node).reduce((sum, slot) => sum + countBlocks(getAt(node, slot)), 0)
+}
+
+function blocksText(count) {
+  return count === 1 ? '1 block' : `${count} blocks`
 }
 
 /**
@@ -77,6 +109,7 @@ export function provideFormulaEditor(target, options) {
     /**
      * Puts a new block into a slot. If the slot already holds a block, that block is moved
      * into the new block's first empty slot (dropping "÷" on [Shots] gives [Shots] ÷ □).
+     * If the new block has no slot for it, the existing block is replaced after confirming.
      */
     insert(path, blockId) {
       const template = BLOCKS_BY_ID[blockId]
@@ -85,7 +118,13 @@ export function provideFormulaEditor(target, options) {
       const existing = getAt(target.value, path)
       if (existing) {
         const slot = emptySlots(created)[0]
-        if (slot) setAt(created, slot, existing)
+        if (slot) {
+          setAt(created, slot, existing)
+        } else {
+          const what = blocksText(countBlocks(existing))
+          const message = `"${template.label}" can't hold the block you dropped it on, so ${what} will be deleted. Continue?`
+          if (!confirm(message)) return
+        }
       }
       setAt(target.value, path, created)
       // Continue with the new block's first empty slot.
@@ -93,13 +132,31 @@ export function provideFormulaEditor(target, options) {
       selectedPath.value = next ? [...path, ...next] : null
     },
 
-    /** Moves a block; if the target slot is filled, the two blocks swap places. */
+    /**
+     * Moves a block; if the target slot is filled, the two blocks swap places. Dropping a
+     * block on one of its ancestors unwraps it: the block replaces that ancestor.
+     */
     move(from, to) {
-      if (isPrefix(from, to) || isPrefix(to, from)) return
+      if (isPrefix(from, to)) return
+      if (isPrefix(to, from)) {
+        editor.unwrap(from, to)
+        return
+      }
       const moving = getAt(target.value, from)
       const replaced = getAt(target.value, to)
       setAt(target.value, to, moving)
       setAt(target.value, from, replaced ?? null)
+    },
+
+    /** Replaces the ancestor block at `to` with its descendant block at `from`. */
+    unwrap(from, to) {
+      const lost = blocksLostByUnwrap(target.value, to, from)
+      if (lost > 0) {
+        const what = blocksText(lost).replace(' ', ' other ')
+        if (!confirm(`Unwrapping this block will delete ${what} around it. Continue?`)) return
+      }
+      setAt(target.value, to, getAt(target.value, from))
+      selectedPath.value = to
     },
 
     /** Handles a drop of palette or tree data on a slot. */
