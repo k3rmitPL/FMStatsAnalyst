@@ -6,6 +6,24 @@
 
 // @import './_mixins.scss';
 
+// Chart colours, for ECharts, which draws on a canvas and can't use SCSS variables: the chart
+// theme reads these properties (src/services/charts/theme.js). Edit the variables in
+// _variables.scss, not these.
+:root {
+  --chart-primary: #{$accent-color};
+  --chart-primary-fill: #{color.change($accent-color, $alpha: $chart-fill-alpha)};
+  --chart-primary-faint: #{color.change($accent-color, $alpha: $chart-faint-alpha)};
+  --chart-secondary: #{$secondary-accent-color};
+  --chart-secondary-fill: #{color.change($secondary-accent-color, $alpha: $chart-fill-alpha)};
+  --chart-text: #{$text-color};
+  --chart-faint: #{color.change($text-color, $alpha: $chart-faint-alpha)};
+  --chart-grid: #{color.change($text-color, $alpha: $chart-grid-alpha)};
+  --chart-line: #{color.change($text-color, $alpha: $chart-line-alpha)};
+  --chart-muted: #{color.change($text-color, $alpha: $chart-muted-alpha)};
+  --chart-tooltip-background: #{$card-background};
+  --chart-tooltip-border: #{$card-border};
+}
+
 * {
   box-sizing: border-box;
 }
@@ -128,41 +146,41 @@ select {
 select {
   padding-top: 0;
   padding-bottom: 0;
-  padding-right: 1.6rem;
+  padding-right: 1.5em;
 
   background-image: url('@/assets/icons/caret-down.svg');
   background-repeat: no-repeat;
-  background-position: right 0.55rem top 47%;
-  background-size: 0.6rem auto;
+  background-position: right 0.55em top 47%;
+  background-size: 0.5em auto;
 
   -moz-appearance: none;
   -webkit-appearance: none;
   appearance: none;
 }
 textarea {
-  height: 5rem;
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-  line-height: 1.5rem;
+  height: 5em;
+  padding-top: 0.25em;
+  padding-bottom: 0.25em;
+  line-height: 1.5em;
 }
 
 // Small icon buttons in the table are plain: no raised button look.
-button:not(.pin, .notes-edit, .star-toggle) {
+button:not(.pin, .notes-edit, .star-toggle, .compare-toggle) {
   @extend %btn;
 }
 button.short {
-  line-height: 2rem;
-  padding-top: 0;
-  padding-bottom: 0;
+  line-height: 1.5em;
+  padding-top: 0.25em;
+  padding-bottom: 0.25em;
 }
 // Buttons that open a dropdown panel: input look, with a caret on the right.
 button.dropdown-expand {
   @extend %input;
-  padding-right: 1.6rem;
+  padding-right: 1.5em;
   background-image: url('@/assets/icons/caret-down.svg');
   background-repeat: no-repeat;
-  background-position: right 0.55rem top 47%;
-  background-size: 0.6rem auto;
+  background-position: right 0.55em top 48%;
+  background-size: 0.5em auto;
 }
 
 code {

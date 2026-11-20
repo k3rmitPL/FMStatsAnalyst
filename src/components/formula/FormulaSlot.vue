@@ -98,9 +98,19 @@ function addLookupRow() {
 }
 
 function fillLookupKeys() {
-  const existing = new Set(node.value.table.map((e) => e.key))
-  for (const key of editor.distinctValues(node.value.column)) {
-    if (!existing.has(key)) node.value.table.push({ key, value: node.value.default ?? 1 })
+  const { column, column2, table } = node.value
+  const value = node.value.default ?? 1
+  if (!column2) {
+    const existing = new Set(table.map((e) => e.key))
+    for (const key of editor.distinctValues(column)) {
+      if (!existing.has(key)) table.push({ key, value })
+    }
+    return
+  }
+  const pairKey = (key, key2) => `${key}\u0000${key2 ?? ''}`
+  const existing = new Set(table.map((e) => pairKey(e.key, e.key2)))
+  for (const [key, key2] of editor.distinctValues(column, column2)) {
+    if (!existing.has(pairKey(key, key2))) table.push({ key, key2, value })
   }
 }
 </script>
@@ -158,11 +168,16 @@ function fillLookupKeys() {
           <span class="row">
             <span class="word">lookup</span>
             <ColumnInput v-model="node.column" />
+            <span class="word">and</span>
+            <ColumnInput
+              v-model="node.column2"
+              placeholder="2nd column (optional)"
+            />
             <button
               type="button"
               class="mini"
               :disabled="!node.column"
-              title="Add a row for every value of this column in the dataset"
+              title="Add a row for every value of the column(s) in the dataset"
               @click.stop="fillLookupKeys"
             >
               fill from data
@@ -170,6 +185,13 @@ function fillLookupKeys() {
           </span>
           <span v-for="(entry, i) in node.table" :key="i" class="row">
             <input v-model="entry.key" class="key-input" placeholder="value" />
+            <input
+              v-if="node.column2"
+              v-model.trim="entry.key2"
+              class="key-input"
+              placeholder="any"
+              title="Leave empty to match any value of the 2nd column"
+            />
             <span class="word">→</span>
             <input v-model.number="entry.value" type="number" step="any" class="number-input" />
             <button

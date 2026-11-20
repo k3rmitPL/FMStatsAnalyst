@@ -7,17 +7,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import ColumnInput from '@/components/formula/ColumnInput.vue'
 import ColumnOptions from '@/components/formula/ColumnOptions.vue'
+import PositionPicker from '@/components/PositionPicker.vue'
 import { FILTER_COMPARISONS, filterGroups } from '@/services/views'
-
-// Positions laid out like a pitch, attack at the top.
-const PITCH = [
-  ['STL', 'STC', 'STR'],
-  ['AML', 'AMC', 'AMR'],
-  ['ML', 'MC', 'MR'],
-  ['WBL', 'DM', 'WBR'],
-  ['DL', 'DC', 'DR'],
-  [null, 'GK', null],
-]
 
 const props = defineProps({
   // Column names the filters can use, and their info (for labels).
@@ -44,18 +35,6 @@ watch(open, (isOpen) => {
 // Clicks on the backdrop land on the <dialog> element itself.
 function onDialogClick(event) {
   if (event.target === dialog.value) open.value = false
-}
-
-// Positions the dataset has a true/false column for (split from its Position column on import).
-const availablePositions = computed(
-  () => new Set(PITCH.flat().filter((pos) => pos && props.columnInfo[pos]?.type === 'boolean')),
-)
-
-function togglePosition(position) {
-  if (!availablePositions.value.has(position)) return
-  positions.value = positions.value.includes(position)
-    ? positions.value.filter((p) => p !== position)
-    : [...positions.value, position]
 }
 
 // Stable keys for the condition rows, so their inputs follow them when they are reordered.
@@ -217,32 +196,7 @@ function clearAll() {
       <div class="sections">
         <section>
           <h3>Positions</h3>
-          <p class="hint">Players who can play any selected position. None selected = everyone.</p>
-          <p v-if="!availablePositions.size" class="hint unavailable">
-            This dataset has no Position column, so players can't be filtered by position.
-          </p>
-          <p v-else-if="availablePositions.size < 16" class="hint unavailable">
-            Greyed-out positions are not in this dataset.
-          </p>
-          <div class="pitch" :class="{ disabled: !availablePositions.size }">
-            <template v-for="(line, r) in PITCH" :key="r">
-              <template v-for="(pos, c) in line" :key="`${r}-${c}`">
-                <button
-                  v-if="pos"
-                  type="button"
-                  class="position"
-                  :class="{ active: positions.includes(pos) }"
-                  :aria-pressed="positions.includes(pos)"
-                  :disabled="!availablePositions.has(pos)"
-                  :title="availablePositions.has(pos) ? '' : 'Not in this dataset'"
-                  @click="togglePosition(pos)"
-                >
-                  {{ pos }}
-                </button>
-                <span v-else></span>
-              </template>
-            </template>
-          </div>
+          <PositionPicker v-model="positions" :column-info="columnInfo" />
         </section>
 
         <section class="conditions">
@@ -569,45 +523,6 @@ h3 {
 .hint.unavailable {
   color: #f2c94c;
   opacity: 1;
-}
-
-.pitch.disabled {
-  opacity: 0.6;
-}
-
-.pitch {
-  width: 14.7rem;
-  display: grid;
-  grid-template-columns: repeat(3, 4rem);
-  gap: 0.35rem;
-  padding: 0.75rem;
-  background: rgba(47, 158, 110, 0.12);
-  border: 1px solid rgba(47, 158, 110, 0.4);
-  border-radius: 6px;
-}
-
-button.position {
-  top: 0;
-  left: 0;
-  padding: 0.3rem 0;
-  color: $text-color;
-  font: inherit;
-  font-size: 0.85rem;
-  background-color: color.adjust($background-color, $lightness: 6%);
-  border: 1px solid color.adjust($background-color, $lightness: 18%);
-  border-radius: 4px;
-  box-shadow: none;
-  cursor: pointer;
-
-  &:hover:not(:disabled) {
-    background-color: color.adjust($background-color, $lightness: 12%);
-  }
-
-  &.active,
-  &.active:hover:not(:disabled) {
-    background-color: color.adjust($accent-color, $lightness: -25%);
-    border-color: $accent-color;
-  }
 }
 
 .filter {

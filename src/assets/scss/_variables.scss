@@ -3,6 +3,8 @@
 $text-color: #eee;
 $link-color: #fff;
 $accent-color: #4fd39a;
+// Second colour of charts: player B, the reference group, the right / lower side.
+$secondary-accent-color: #9b8cff;
 
 $background-color: #1c2131;
 $card-background: color.adjust($background-color, $lightness: 3%);
@@ -13,6 +15,15 @@ $card-border: color.adjust($background-color, $lightness: 12%);
 $compare-better-color: #1f9d4c;
 $compare-worse-color: #c43c3c;
 
+// Charts (see the --chart-* properties in app.scss): $accent-color is the main / left / upper
+// side, $secondary-accent-color the other one, axes and labels use $text-color. These opacities
+// derive the lighter variants from those colours.
+$chart-fill-alpha: 0.25; // radar polygon fills
+$chart-faint-alpha: 0.12; // the faint group polygon, the selection overlay
+$chart-grid-alpha: 0.12; // grid and split lines
+$chart-line-alpha: 0.45; // reference lines (averages, diagonal)
+$chart-muted-alpha: 0.35; // scatter dots that aren't highlighted
+
 // Below this width the Metrics page stacks its columns (list, editor, palette), so the side
 // columns stop being sticky.
 $sidebar-breakpoint: 1100px;
@@ -21,5 +32,5 @@ $default-font-size: 1rem;
 $default-line-height: 1.5rem;
 
 $regular-fonts:
-  'Roboto Condensed', 'Open Sans Condensed', 'Open Sans', 'Helvetica Neue', HelveticaNeue,
-  Helvetica, Arial, Tahoma, sans-serif;
+  'Roboto Condensed', 'Open Sans Condensed', 'Helvetica Neue Condensed', 'Arial Narrow',
+  'Open Sans', 'Helvetica Neue', HelveticaNeue, Helvetica, Arial, Tahoma, sans-serif;

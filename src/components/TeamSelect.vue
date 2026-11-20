@@ -84,7 +84,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
     <span class="label">Highlight Team</span>
     <button
       type="button"
-      class="dropdown-expand"
+      :class="{ 'dropdown-expand': true, 'join-right': team }"
       :aria-expanded="isOpen"
       :disabled="!teams.length"
       @click="isOpen ? close() : open()"
@@ -94,7 +94,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
     <button
       v-if="team"
       type="button"
-      class="clear"
+      class="clear join-left"
       title="Clear team"
       aria-label="Clear team"
       @click="team = ''"

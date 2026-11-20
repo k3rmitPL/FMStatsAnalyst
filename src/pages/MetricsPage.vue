@@ -51,13 +51,21 @@ const knownColumns = computed(() => new Set(columnOptions.value))
 
 const editor = provideFormulaEditor(metric, {
   knownColumns,
-  distinctValues(column) {
-    const values = new Set()
+  // Distinct values of a column, or with `column2` distinct [value, value2] pairs.
+  distinctValues(column, column2) {
+    const text = (v) => (v != null && v !== '' && typeof v !== 'object' ? String(v) : null)
+    const values = new Map()
     for (const row of rows.value) {
-      const v = row[column]
-      if (v != null && v !== '' && typeof v !== 'object') values.add(String(v))
+      const a = text(row[column])
+      if (a == null) continue
+      if (!column2) values.set(a, a)
+      else {
+        const b = text(row[column2]) ?? ''
+        values.set(`${a}\u0000${b}`, [a, b])
+      }
     }
-    return [...values].sort((a, b) => a.localeCompare(b))
+    const sortKey = (v) => (Array.isArray(v) ? v.join('\u0000') : v)
+    return [...values.values()].sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
   },
 })
 

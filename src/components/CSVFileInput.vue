@@ -4,7 +4,7 @@
     <button
       v-if="!isProcessing"
       type="button"
-      class="short"
+      class="short join-right"
       title="Load a CSV file exported from Football Manager"
       @click="fileInput.click()"
     >

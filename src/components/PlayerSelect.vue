@@ -10,6 +10,10 @@ const props = defineProps({
   // Players to choose from, in display order: { id, name, details: string[] }.
   players: { type: Array, required: true },
   label: { type: String, default: 'Player' },
+  // Which edge of the control the list lines up with: 'right' (for controls at the right of the
+  // screen) or 'left'.
+  align: { type: String, default: 'right' },
+  paddingLeft: { type: Boolean, required: false },
 })
 
 // Selected player id (null = none).
@@ -96,11 +100,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 </script>
 
 <template>
-  <div ref="root" class="player-select" @keydown="onKeydown">
+  <div ref="root" :class="{ 'player-select': true, 'pad-left': paddingLeft }" @keydown="onKeydown">
     <span class="label">{{ label }}</span>
     <button
       type="button"
-      class="dropdown-expand toggle"
+      :class="{ 'dropdown-expand': true, toggle: true, 'join-right': selected }"
       :aria-expanded="isOpen"
       :disabled="!players.length"
       :title="selected ? [selected.name, ...selected.details].join(' · ') : undefined"
@@ -111,7 +115,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
     <button
       v-if="selected"
       type="button"
-      class="clear"
+      class="clear join-left"
       title="Clear player"
       aria-label="Clear player"
       @click="player = null"
@@ -119,7 +123,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
       ×
     </button>
 
-    <div v-if="isOpen" class="panel">
+    <div v-if="isOpen" class="panel" :class="{ 'align-left': align === 'left' }">
       <input ref="filterInput" v-model="filter" type="search" placeholder="Search players" />
       <ul ref="list" role="listbox">
         <li
@@ -151,6 +155,10 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+
+  &.pad-left {
+    padding-left: 1rem;
+  }
 }
 
 .toggle {
@@ -177,6 +185,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   border: 1px solid color.adjust($background-color, $lightness: 15%);
   border-radius: 5px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  &.align-left {
+    right: auto;
+    left: 0;
+  }
 }
 
 input[type='search'] {

@@ -8,6 +8,8 @@
 //   { type: 'call', fn: 'mean', args: [...] }               functions, see FUNCTIONS
 //   { type: 'if', left, cmp: '==', right, then, else }     if left cmp right then ... else ...
 //   { type: 'lookup', column, table: [{ key, value }], default }   text value → number
+//     With an optional second column (`column2`), entries can also carry `key2`: an entry
+//     matching both values wins, then one matching `key` with no `key2`, then the default.
 //   { type: 'weighted', items: [{ node, weight }] }        weighted average
 // An empty slot is `null`.
 //
@@ -118,8 +120,7 @@ export function evaluate(node, row, ctx) {
       return evaluate(test ? node.then : node.else, row, ctx)
     }
     case 'lookup': {
-      const key = row[node.column]
-      const match = (node.table ?? []).find((entry) => entry.key === String(key ?? ''))
+      const match = lookupMatch(node, row)
       return finite(Number(match ? match.value : node.default))
     }
     case 'weighted': {
@@ -137,6 +138,18 @@ export function evaluate(node, row, ctx) {
     default:
       return null
   }
+}
+
+/** The lookup table entry for a row, or undefined when none matches. */
+function lookupMatch(node, row) {
+  const table = node.table ?? []
+  const key = String(row[node.column] ?? '')
+  if (!node.column2) return table.find((entry) => entry.key === key)
+  const key2 = String(row[node.column2] ?? '')
+  return (
+    table.find((entry) => entry.key === key && entry.key2 && entry.key2 === key2) ??
+    table.find((entry) => entry.key === key && !entry.key2)
+  )
 }
 
 /** Calls `visit(node)` for every node in the tree. */
@@ -168,6 +181,7 @@ export function referencedColumns(node) {
     if ((n.type === 'column' || n.type === 'stat' || n.type === 'lookup') && n.column) {
       columns.add(n.column)
     }
+    if (n.type === 'lookup' && n.column2) columns.add(n.column2)
   })
   return columns
 }
@@ -213,7 +227,7 @@ export function toText(node, label = (c) => c, top = true) {
     case 'if':
       return `if ${t(node.left)} ${COMPARISONS[node.cmp]?.label ?? node.cmp} ${t(node.right)} then ${t(node.then)} else ${t(node.else)}`
     case 'lookup':
-      return `lookup [${node.column ? label(node.column) : '?'}]`
+      return `lookup [${node.column ? label(node.column) : '?'}]${node.column2 ? ` + [${label(node.column2)}]` : ''}`
     case 'weighted':
       return `weighted(${(node.items ?? []).map((i) => `${toText(i.node, label)} ×${i.weight}`).join(', ')})`
     default:

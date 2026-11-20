@@ -93,6 +93,9 @@ button.menu-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  // As tall as the other short buttons (their text line plus the border), wherever it sits; it
+  // holds only an icon, so it would otherwise be as small as the icon.
+  min-height: calc(2rem + 2px);
   padding-right: 0.6rem;
   padding-left: 0.6rem;
 

@@ -1,5 +1,6 @@
 <script setup>
-// Asks for a name when the table's layout is saved as a new view.
+// Asks for a name: when the table's layout is saved as a new view, and for dashboards (new,
+// rename) on the Charts tab.
 
 import { computed, nextTick, ref, watch } from 'vue'
 
@@ -7,6 +8,9 @@ const props = defineProps({
   // Names already used, to warn about duplicates.
   existingNames: { type: Array, default: () => [] },
   initialName: { type: String, default: '' },
+  title: { type: String, default: 'Save as new view' },
+  duplicateMessage: { type: String, default: 'Another view already has this name.' },
+  submitLabel: { type: String, default: 'Save' },
 })
 
 const open = defineModel('open', { type: Boolean, default: false })
@@ -42,15 +46,15 @@ function submit() {
 <template>
   <dialog ref="dialog" class="save-dialog" @close="open = false">
     <form class="dialog-body" @submit.prevent="submit">
-      <h2>Save as new view</h2>
+      <h2>{{ title }}</h2>
       <label class="field">
         Name
         <input ref="nameInput" v-model="name" type="text" required />
       </label>
-      <p v-if="duplicate" class="warning">Another view already has this name.</p>
+      <p v-if="duplicate" class="warning">{{ duplicateMessage }}</p>
       <footer>
         <button type="button" class="short" @click="open = false">Cancel</button>
-        <button type="submit" class="short primary" :disabled="!canSave">Save</button>
+        <button type="submit" class="short primary" :disabled="!canSave">{{ submitLabel }}</button>
       </footer>
     </form>
   </dialog>

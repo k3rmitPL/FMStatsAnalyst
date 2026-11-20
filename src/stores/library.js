@@ -1,7 +1,8 @@
-// User-defined metrics and views, kept in IndexedDB and shared by all pages.
-// `metrics` and `views` hold the saved versions (persisted whenever they change). The metrics
-// editor works on drafts and writes them back with an explicit save; metrics can be organised in
-// groups. Views are edited on the Analyse page, which writes them here directly.
+// User-defined metrics, views and dashboards, kept in IndexedDB and shared by all pages.
+// `metrics`, `views` and `dashboards` hold the saved versions (persisted whenever they change).
+// The metrics editor works on drafts and writes them back with an explicit save; metrics can be
+// organised in groups. Views and dashboards are edited on the Analyse page (Table and Charts tabs), which writes
+// them here directly.
 
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
@@ -10,6 +11,7 @@ import { createDrafts } from './drafts'
 import { createGroups, parseGroups } from './groups'
 import { getConfig, saveConfig } from '@/services/db'
 import { downloadJson, readJsonFile } from '@/services/fileTransfer'
+import { dashboardsFile, normalizeDashboard, parseDashboardsFile } from '@/services/dashboards'
 import { metricsFile, parseMetricsFile } from '@/services/metrics'
 import { parseViewsFile, viewsFile, withoutGroup } from '@/services/views'
 
@@ -31,6 +33,7 @@ function merge(existing, imported) {
 export const useLibraryStore = defineStore('library', () => {
   const metrics = ref([])
   const views = ref([])
+  const dashboards = ref([])
   const metricGroupList = ref([])
   const loaded = ref(false)
   let loading = null
@@ -39,28 +42,30 @@ export const useLibraryStore = defineStore('library', () => {
   const metricGroups = createGroups(metricGroupList, metrics, metricDrafts)
 
   function load() {
-    loading ??= Promise.all(['metrics', 'views', 'metricGroups'].map((key) => getConfig(key))).then(
-      ([m, v, mg]) => {
-        metrics.value = m
-        // Views are no longer grouped; drop group references left from older versions.
-        views.value = v.map(withoutGroup).sort((a, b) => {
-          const aName = a.name.toLowerCase()
-          const bName = b.name.toLowerCase()
-          if (aName < bName) return -1
-          if (aName > bName) return 1
-          return 0
-        })
+    loading ??= Promise.all(
+      ['metrics', 'views', 'metricGroups', 'dashboards'].map((key) => getConfig(key)),
+    ).then(([m, v, mg, d]) => {
+      metrics.value = m
+      // Views are no longer grouped; drop group references left from older versions.
+      views.value = v.map(withoutGroup).sort((a, b) => {
+        const aName = a.name.toLowerCase()
+        const bName = b.name.toLowerCase()
+        if (aName < bName) return -1
+        if (aName > bName) return 1
+        return 0
+      })
 
-        metricGroupList.value = mg
-        loaded.value = true
-        watch(metrics, (value) => saveConfig('metrics', value), { deep: true })
-        watch(views, (value) => saveConfig('views', value), { deep: true })
-        watch(metricGroupList, (value) => saveConfig('metricGroups', value), { deep: true })
-        window.addEventListener('beforeunload', (event) => {
-          if (metricDrafts.dirtyCount) event.preventDefault()
-        })
-      },
-    )
+      metricGroupList.value = mg
+      dashboards.value = d.map(normalizeDashboard)
+      loaded.value = true
+      watch(metrics, (value) => saveConfig('metrics', value), { deep: true })
+      watch(views, (value) => saveConfig('views', value), { deep: true })
+      watch(metricGroupList, (value) => saveConfig('metricGroups', value), { deep: true })
+      watch(dashboards, (value) => saveConfig('dashboards', value), { deep: true })
+      window.addEventListener('beforeunload', (event) => {
+        if (metricDrafts.dirtyCount) event.preventDefault()
+      })
+    })
     return loading
   }
 
@@ -86,6 +91,17 @@ export const useLibraryStore = defineStore('library', () => {
     views.value = views.value.filter((v) => v.id !== id)
   }
 
+  async function importDashboards(file) {
+    const imported = parseDashboardsFile(await readJsonFile(file))
+    const { result, added, replaced } = merge(dashboards.value, imported)
+    dashboards.value = result
+    return { added, replaced }
+  }
+
+  function deleteDashboard(id) {
+    dashboards.value = dashboards.value.filter((d) => d.id !== id)
+  }
+
   function exportMetrics() {
     downloadJson('fm-metrics.json', metricsFile(metrics.value, metricGroupList.value))
   }
@@ -94,9 +110,14 @@ export const useLibraryStore = defineStore('library', () => {
     downloadJson('fm-views.json', viewsFile(views.value))
   }
 
+  function exportDashboards() {
+    downloadJson('fm-dashboards.json', dashboardsFile(dashboards.value))
+  }
+
   return {
     metrics,
     views,
+    dashboards,
     loaded,
     metricDrafts,
     metricGroups,
@@ -104,7 +125,10 @@ export const useLibraryStore = defineStore('library', () => {
     importMetrics,
     importViews,
     deleteView,
+    importDashboards,
+    deleteDashboard,
     exportMetrics,
     exportViews,
+    exportDashboards,
   }
 })
