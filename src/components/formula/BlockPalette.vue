@@ -38,7 +38,7 @@ function onTrashDrop(event) {
     <section
       v-for="group in BLOCKS"
       :key="group.group"
-      :class="`group-${group.group.toLowerCase()}`"
+      :class="`category-${group.category}`"
     >
       <h4>{{ group.group }}</h4>
       <div class="items">
@@ -72,13 +72,6 @@ function onTrashDrop(event) {
 
 <style lang="scss" scoped>
 @use 'sass:color';
-
-$colors: (
-  values: #3d7bd9,
-  math: #c27d1d,
-  functions: #8a54c9,
-  logic: #2f9e6e,
-);
 
 .palette {
   position: sticky;
@@ -128,8 +121,8 @@ h4 {
   cursor: grab;
 }
 
-@each $group, $color in $colors {
-  .group-#{$group} .palette-block {
+@each $category, $color in $block-colors {
+  .category-#{$category} .palette-block {
     background: color.change($color, $alpha: 0.18);
     border-color: color.change($color, $alpha: 0.7);
 

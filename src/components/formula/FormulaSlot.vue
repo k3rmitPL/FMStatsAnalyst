@@ -5,9 +5,11 @@ import { computed, ref } from 'vue'
 
 import {
   COMPARISONS,
+  DEFAULT_PERCENTILE,
   FUNCTIONS,
   OPERATORS,
   STATS,
+  VERSUS_BASELINES,
   blockInfo,
   nodeCategory,
 } from '@/services/expression'
@@ -159,6 +161,17 @@ function fillLookupKeys() {
         <select v-model="node.fn">
           <option v-for="(label, key) in STATS" :key="key" :value="key">{{ label }}</option>
         </select>
+        <input
+          v-if="node.fn === 'percentile'"
+          v-model.number="node.p"
+          type="number"
+          min="0"
+          max="100"
+          step="any"
+          class="percent-input"
+          :placeholder="String(DEFAULT_PERCENTILE)"
+          title="Percentile, 0-100 (50 = median, 90 = better than 90% of the dataset)"
+        />
         <span class="word">of</span>
         <ColumnInput v-model="node.column" />
       </template>
@@ -169,10 +182,7 @@ function fillLookupKeys() {
             <span class="word">lookup</span>
             <ColumnInput v-model="node.column" />
             <span class="word">and</span>
-            <ColumnInput
-              v-model="node.column2"
-              placeholder="2nd column (optional)"
-            />
+            <ColumnInput v-model="node.column2" placeholder="2nd column (optional)" />
             <button
               type="button"
               class="mini"
@@ -273,6 +283,48 @@ function fillLookupKeys() {
         </span>
       </template>
 
+      <template v-else-if="node.type === 'versus'">
+        <span class="word strong">Index</span>
+        <span class="word">of</span>
+        <ColumnInput v-model="node.column" />
+        <span class="word">vs</span>
+        <select v-model="node.baseline">
+          <option v-for="key in VERSUS_BASELINES" :key="key" :value="key">{{ STATS[key] }}</option>
+        </select>
+        <input
+          v-if="node.baseline === 'percentile'"
+          v-model.number="node.p"
+          type="number"
+          min="0"
+          max="100"
+          step="any"
+          class="percent-input"
+          :placeholder="String(DEFAULT_PERCENTILE)"
+          title="Percentile, 0-100"
+        />
+        <span class="word">clamp</span>
+        <input
+          v-model.number="node.min"
+          type="number"
+          step="any"
+          class="clamp-input join-right"
+          placeholder="none"
+          title="Lowest result (leave empty for no limit)"
+        />
+        <input
+          v-model.number="node.max"
+          type="number"
+          step="any"
+          class="clamp-input join-left"
+          placeholder="none"
+          title="Highest result (leave empty for no limit). Also used when the baseline is 0."
+        />
+        <label class="check" title="Divide the baseline by the value, so lower values score higher">
+          <input v-model="node.invert" type="checkbox" />
+          <span class="word">lower is better</span>
+        </label>
+      </template>
+
       <template v-else-if="node.type === 'weighted'">
         <span class="stack">
           <span class="row"><span class="word strong">weighted average</span></span>
@@ -311,11 +363,6 @@ function fillLookupKeys() {
 
 <style lang="scss" scoped>
 @use 'sass:color';
-
-$value: #3d7bd9;
-$math: #c27d1d;
-$function: #8a54c9;
-$logic: #2f9e6e;
 
 .slot {
   display: inline-flex;
@@ -362,21 +409,16 @@ $logic: #2f9e6e;
   position: relative;
 
   // Each category sets its colour once; the background, border and name tab use it.
-  &.value {
-    --block-color: #{$value};
-    background: color.change($value, $alpha: 0.18);
-  }
-  &.math {
-    --block-color: #{$math};
-    background: color.change($math, $alpha: 0.16);
-  }
-  &.function {
-    --block-color: #{$function};
-    background: color.change($function, $alpha: 0.16);
-  }
-  &.logic {
-    --block-color: #{$logic};
-    background: color.change($logic, $alpha: 0.16);
+  @each $category, $color in $block-colors {
+    // Blue reads darker on the background, so value blocks get a little more of it.
+    $alpha: 0.16;
+    @if $category == value {
+      $alpha: 0.18;
+    }
+    &.#{$category} {
+      --block-color: #{$color};
+      background: color.change($color, $alpha: $alpha);
+    }
   }
 }
 
@@ -443,6 +485,12 @@ $logic: #2f9e6e;
   }
 }
 
+input + .word,
+button + .word,
+select + .word {
+  margin-left: 0.25em;
+}
+
 input,
 select {
   padding: 0.15rem 0.3rem;
@@ -454,8 +502,28 @@ select {
   border-radius: 4px;
 }
 
+.join-right {
+  margin-right: -0.3rem;
+}
+
 .number-input {
   width: 5rem;
+}
+
+.percent-input,
+.clamp-input {
+  width: 3.5rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+
+  input {
+    margin: 0;
+  }
 }
 
 .key-input {

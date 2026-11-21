@@ -3,7 +3,8 @@
 // A formula is a tree of plain JSON nodes, so it can be stored and exported as-is:
 //   { type: 'number', value: 100 }
 //   { type: 'column', column: 'Sv %' }                     value of a column in the current row
-//   { type: 'stat', fn: 'max', column: 'Shot/90' }         max/min/mean/sum of a column, whole dataset
+//   { type: 'stat', fn: 'max', column: 'Shot/90' }         max/min/mean/median/sum of a column, whole dataset
+//   { type: 'stat', fn: 'percentile', p: 75, column }       P-th percentile (0-100) of a column
 //   { type: 'op', op: '/', left, right }                   + - * / ^
 //   { type: 'call', fn: 'mean', args: [...] }               functions, see FUNCTIONS
 //   { type: 'if', left, cmp: '==', right, then, else }     if left cmp right then ... else ...
@@ -11,6 +12,10 @@
 //     With an optional second column (`column2`), entries can also carry `key2`: an entry
 //     matching both values wins, then one matching `key` with no `key2`, then the default.
 //   { type: 'weighted', items: [{ node, weight }] }        weighted average
+//   { type: 'versus', column, baseline: 'median', p, min, max, invert }
+//     Versus index: the row's value ÷ a dataset statistic of the same column, clamped to
+//     min..max (either may be empty). `invert` (lower is better) gives baseline ÷ value.
+//     When the divisor is 0: 0 ÷ 0 gives 1 (same as the baseline), otherwise `max` (or null).
 // An empty slot is `null`.
 //
 // Values are numbers or null (missing / not computable). null propagates through arithmetic,
@@ -37,7 +42,43 @@ export const STATS = {
   max: 'max',
   min: 'min',
   mean: 'average',
+  median: 'median',
+  percentile: 'percentile',
   sum: 'sum',
+}
+
+export const DEFAULT_PERCENTILE = 75
+
+/** The percentile (0-100) a stat node uses: its own `p`, clamped, or the default. */
+export function statPercentile(node) {
+  // An emptied input leaves '' behind, which Number() would read as 0.
+  const p = node.p === '' || node.p == null ? NaN : Number(node.p)
+  return Number.isFinite(p) ? Math.min(100, Math.max(0, p)) : DEFAULT_PERCENTILE
+}
+
+/** Statistics a Versus index can compare against (keys of STATS). */
+export const VERSUS_BASELINES = ['median', 'mean', 'max', 'percentile']
+
+/** An optional numeric setting: null when left empty. */
+function optionalNumber(value) {
+  return value === '' || value == null ? null : finite(Number(value))
+}
+
+function versusIndex(node, row, ctx) {
+  const value = toNumber(row[node.column])
+  const p = node.baseline === 'percentile' ? statPercentile(node) : undefined
+  const baseline = ctx.stat(node.baseline, node.column, p)
+  if (value == null || baseline == null) return null
+  const lo = optionalNumber(node.min)
+  const hi = optionalNumber(node.max)
+  const [top, bottom] = node.invert ? [baseline, value] : [value, baseline]
+  let x
+  if (bottom !== 0) x = top / bottom
+  else if (top === 0) x = 1
+  else return hi
+  if (lo != null) x = Math.max(lo, x)
+  if (hi != null) x = Math.min(hi, x)
+  return finite(x)
 }
 
 // args: fixed argument names, or `variadic: true` for a list (at least `minArgs`).
@@ -89,7 +130,7 @@ function finite(x) {
 
 /**
  * Evaluates a node for one row.
- * `ctx.stat(fn, column)` returns a dataset statistic.
+ * `ctx.stat(fn, column, p)` returns a dataset statistic (`p` only matters for percentile).
  */
 export function evaluate(node, row, ctx) {
   if (!node) return null
@@ -99,7 +140,11 @@ export function evaluate(node, row, ctx) {
     case 'column':
       return toNumber(row[node.column])
     case 'stat':
-      return ctx.stat(node.fn, node.column)
+      return ctx.stat(
+        node.fn,
+        node.column,
+        node.fn === 'percentile' ? statPercentile(node) : undefined,
+      )
     case 'op': {
       const a = evaluate(node.left, row, ctx)
       const b = evaluate(node.right, row, ctx)
@@ -123,6 +168,8 @@ export function evaluate(node, row, ctx) {
       const match = lookupMatch(node, row)
       return finite(Number(match ? match.value : node.default))
     }
+    case 'versus':
+      return versusIndex(node, row, ctx)
     case 'weighted': {
       let total = 0
       let weights = 0
@@ -174,11 +221,14 @@ function children(node) {
   }
 }
 
+// Node types that read a column of the dataset.
+const COLUMN_NODES = new Set(['column', 'stat', 'lookup', 'versus'])
+
 /** Every column name the formula reads (including columns used by statistics and lookups). */
 export function referencedColumns(node) {
   const columns = new Set()
   walk(node, (n) => {
-    if ((n.type === 'column' || n.type === 'stat' || n.type === 'lookup') && n.column) {
+    if (COLUMN_NODES.has(n.type) && n.column) {
       columns.add(n.column)
     }
     if (n.type === 'lookup' && n.column2) columns.add(n.column2)
@@ -193,7 +243,7 @@ export function structuralErrors(node) {
   let emptySlots = 0
   walk(node, (n) => {
     for (const child of children(n)) if (!child) emptySlots++
-    if ((n.type === 'column' || n.type === 'stat' || n.type === 'lookup') && !n.column) {
+    if (COLUMN_NODES.has(n.type) && !n.column) {
       errors.push('A block has no column selected.')
     }
     if (n.type === 'call' && FUNCTIONS[n.fn]?.variadic && !(n.args ?? []).length) {
@@ -216,8 +266,11 @@ export function toText(node, label = (c) => c, top = true) {
       return String(node.value)
     case 'column':
       return node.column ? `[${label(node.column)}]` : '[?]'
-    case 'stat':
-      return `${STATS[node.fn] ?? node.fn} of [${node.column ? label(node.column) : '?'}]`
+    case 'stat': {
+      const name =
+        node.fn === 'percentile' ? `P${statPercentile(node)}` : (STATS[node.fn] ?? node.fn)
+      return `${name} of [${node.column ? label(node.column) : '?'}]`
+    }
     case 'op': {
       const text = `${t(node.left)} ${OPERATORS[node.op]?.label ?? node.op} ${t(node.right)}`
       return top ? text : `(${text})`
@@ -228,6 +281,15 @@ export function toText(node, label = (c) => c, top = true) {
       return `if ${t(node.left)} ${COMPARISONS[node.cmp]?.label ?? node.cmp} ${t(node.right)} then ${t(node.then)} else ${t(node.else)}`
     case 'lookup':
       return `lookup [${node.column ? label(node.column) : '?'}]${node.column2 ? ` + [${label(node.column2)}]` : ''}`
+    case 'versus': {
+      const base =
+        node.baseline === 'percentile' ? `P${statPercentile(node)}` : (STATS[node.baseline] ?? '?')
+      const col = node.column ? label(node.column) : '?'
+      const lo = optionalNumber(node.min)
+      const hi = optionalNumber(node.max)
+      const range = lo == null && hi == null ? '' : `, ${lo ?? '−∞'} to ${hi ?? '∞'}`
+      return `index of [${col}] vs ${base}${node.invert ? ', lower is better' : ''}${range}`
+    }
     case 'weighted':
       return `weighted(${(node.items ?? []).map((i) => `${toText(i.node, label)} ×${i.weight}`).join(', ')})`
     default:
@@ -239,23 +301,34 @@ export function toText(node, label = (c) => c, top = true) {
 export const BLOCKS = [
   {
     group: 'Values',
+    category: 'value',
     items: [
       { id: 'number', label: 'Number', create: () => ({ type: 'number', value: 1 }) },
       { id: 'column', label: 'Column value', create: () => ({ type: 'column', column: '' }) },
       {
         id: 'stat',
-        label: 'Dataset max / min / average',
+        label: 'Dataset value',
+        hint: 'Max, min, average, median, percentile or sum of a column over the whole dataset',
         create: () => ({ type: 'stat', fn: 'max', column: '' }),
       },
       {
-        id: 'lookup',
-        label: 'Lookup table',
-        create: () => ({ type: 'lookup', column: '', table: [], default: 1 }),
+        id: 'versus',
+        label: 'Versus index',
+        hint: 'Value ÷ dataset median (or average, max, percentile) of the same column, clamped',
+        create: () => ({
+          type: 'versus',
+          column: '',
+          baseline: 'median',
+          min: 0,
+          max: 3,
+          invert: false,
+        }),
       },
     ],
   },
   {
     group: 'Math',
+    category: 'math',
     items: Object.entries(OPERATORS).map(([op, def]) => ({
       id: `op${op}`,
       label: `a ${def.label} b`,
@@ -264,26 +337,8 @@ export const BLOCKS = [
   },
   {
     group: 'Functions',
-    items: Object.entries(FUNCTIONS).map(([fn, def]) => ({
-      id: `fn-${fn}`,
-      label: def.label,
-      hint: def.hint,
-      create: () => ({
-        type: 'call',
-        fn,
-        args: def.variadic ? [null, null] : def.args.map(() => null),
-      }),
-    })),
-  },
-  {
-    group: 'Logic',
+    category: 'function',
     items: [
-      {
-        id: 'if',
-        label: 'If ... then ... else',
-        // oxlint-disable-next-line unicorn/no-thenable
-        create: () => ({ type: 'if', left: null, cmp: '==', right: null, then: null, else: null }),
-      },
       {
         id: 'weighted',
         label: 'Weighted average',
@@ -294,6 +349,33 @@ export const BLOCKS = [
             { node: null, weight: 1 },
           ],
         }),
+      },
+      ...Object.entries(FUNCTIONS).map(([fn, def]) => ({
+        id: `fn-${fn}`,
+        label: def.label,
+        hint: def.hint,
+        create: () => ({
+          type: 'call',
+          fn,
+          args: def.variadic ? [null, null] : def.args.map(() => null),
+        }),
+      })),
+    ],
+  },
+  {
+    group: 'Logic',
+    category: 'logic',
+    items: [
+      {
+        id: 'if',
+        label: 'If ... then ... else',
+        // oxlint-disable-next-line unicorn/no-thenable
+        create: () => ({ type: 'if', left: null, cmp: '==', right: null, then: null, else: null }),
+      },
+      {
+        id: 'lookup',
+        label: 'Lookup table',
+        create: () => ({ type: 'lookup', column: '', table: [], default: 1 }),
       },
     ],
   },
@@ -313,9 +395,15 @@ export function blockInfo(node) {
     case 'op':
       return { group: GROUP_BY_BLOCK_ID[`op${node.op}`], name: OPERATORS[node.op]?.name ?? node.op }
     case 'call':
-      return { group: GROUP_BY_BLOCK_ID[`fn-${node.fn}`], name: FUNCTIONS[node.fn]?.label ?? node.fn }
+      return {
+        group: GROUP_BY_BLOCK_ID[`fn-${node.fn}`],
+        name: FUNCTIONS[node.fn]?.label ?? node.fn,
+      }
     default:
-      return { group: GROUP_BY_BLOCK_ID[node?.type], name: BLOCKS_BY_ID[node?.type]?.label ?? node?.type }
+      return {
+        group: GROUP_BY_BLOCK_ID[node?.type],
+        name: BLOCKS_BY_ID[node?.type]?.label ?? node?.type,
+      }
   }
 }
 
@@ -325,11 +413,12 @@ export function nodeCategory(node) {
     case 'number':
     case 'column':
     case 'stat':
-    case 'lookup':
+    case 'versus':
       return 'value'
     case 'op':
       return 'math'
     case 'call':
+    case 'weighted':
       return 'function'
     default:
       return 'logic'

@@ -72,13 +72,14 @@
     background-color: color.adjust($background-color, $lightness: 10%);
   }
 
+  &.join-right {
+    margin-right: -0.5rem;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
   &.join-left {
     margin-left: -1px;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
-  }
-  &.join-right {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
   }
 }

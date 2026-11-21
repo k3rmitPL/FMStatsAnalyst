@@ -24,6 +24,15 @@ $chart-grid-alpha: 0.12; // grid and split lines
 $chart-line-alpha: 0.45; // reference lines (averages, diagonal)
 $chart-muted-alpha: 0.35; // scatter dots that aren't highlighted
 
+// Metric formula editor: one colour per block category (see nodeCategory() and the `category`
+// of each BLOCKS group in services/expression.js). Used by the blocks and the palette.
+$block-colors: (
+  value: #3d7bd9,
+  math: #c27d1d,
+  function: #8a54c9,
+  logic: #2f9e6e,
+);
+
 // Below this width the Metrics page stacks its columns (list, editor, palette), so the side
 // columns stop being sticky.
 $sidebar-breakpoint: 1100px;

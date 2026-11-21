@@ -67,11 +67,20 @@ function dependencyOrder(metrics) {
   return { order: order.filter((m) => !cyclic.has(m.name)), cyclic }
 }
 
-function columnStat(rows, fn, column) {
+/** P-th percentile (0-100) of sorted values, interpolating between neighbours (like Excel's PERCENTILE.INC). */
+function percentile(sorted, p) {
+  const pos = ((sorted.length - 1) * p) / 100
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
+}
+
+function columnStat(rows, fn, column, p) {
   let count = 0
   let total = 0
   let min = Infinity
   let max = -Infinity
+  const values = []
   for (const row of rows) {
     const v = toNumber(row[column])
     if (v == null) continue
@@ -79,9 +88,14 @@ function columnStat(rows, fn, column) {
     total += v
     if (v < min) min = v
     if (v > max) max = v
+    values.push(v)
   }
   if (!count) return null
   switch (fn) {
+    case 'median':
+      return percentile(values.sort((a, b) => a - b), 50)
+    case 'percentile':
+      return percentile(values.sort((a, b) => a - b), p)
     case 'max':
       return max
     case 'min':
@@ -130,9 +144,9 @@ export function computeMetrics(sourceRows, metrics, columns = []) {
   const known = new Set([...columns, ...seen])
   const statCache = new Map()
   const ctx = {
-    stat(fn, column) {
-      const key = `${fn}\u0000${column}`
-      if (!statCache.has(key)) statCache.set(key, columnStat(rows, fn, column))
+    stat(fn, column, p) {
+      const key = `${fn}\u0000${column}\u0000${p ?? ''}`
+      if (!statCache.has(key)) statCache.set(key, columnStat(rows, fn, column, p))
       return statCache.get(key)
     },
   }
